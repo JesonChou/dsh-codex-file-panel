@@ -1,7 +1,8 @@
 /**
- * The Codex-style bottom panel, mounted through the shell.overlay slot so it
- * spans the app instead of living inside the right details column. Today it
- * hosts one terminal; the right-side header button toggles it.
+ * The Codex-style bottom panel. It renders through the shell.overlay slot for
+ * framework discovery, but portals its DOM into the DSH three-column frame as
+ * a true grid row (conversation + details width only), so opening it never
+ * lifts or overlays the left sidebar.
  */
 import {
   IconCloseOutline16,
@@ -10,11 +11,18 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { TerminalView } from './TerminalView.tsx'
 import { toggleBottomPanel, useWorkbenchUi } from './workbench-store.ts'
 
 export type BottomPanelProps =
   PropsRuntime<'shell.overlay'> & PropsLocale<'codex-files'>
+
+/** The DSH three-column frame is the overlay slot's parent. */
+function findLayoutFrame(): HTMLElement | null {
+  const overlay = document.querySelector('[data-shell-overlay]')
+  return overlay?.parentElement ?? null
+}
 
 export function BottomPanel({ useSessions, t }: BottomPanelProps) {
   const sessionId = useSessions(state => state.current)
@@ -22,6 +30,7 @@ export function BottomPanel({ useSessions, t }: BottomPanelProps) {
   const rootRef = useRef<HTMLDivElement>(null)
   const [terminalTabs, setTerminalTabs] = useState<string[]>(['bottom-terminal-1'])
   const [activeTab, setActiveTab] = useState('bottom-terminal-1')
+  const [frame, setFrame] = useState<HTMLElement | null>(() => findLayoutFrame())
 
   useEffect(() => {
     setTerminalTabs(['bottom-terminal-1'])
@@ -29,30 +38,22 @@ export function BottomPanel({ useSessions, t }: BottomPanelProps) {
   }, [sessionId])
 
   useLayoutEffect(() => {
-    const frame = rootRef.current?.closest('[data-shell-overlay]')?.parentElement ?? null
-    if (frame === null || !bottomPanelOpen) return
+    if (frame === null) {
+      setFrame(findLayoutFrame())
+      return
+    }
+    if (!bottomPanelOpen) return
     frame.setAttribute('data-codex-files-bottom-panel-open', 'true')
     frame.style.setProperty('--cfx-bottom-panel-height', '42vh')
-    const updateSidebarWidth = (): void => {
-      const sidebar = frame.firstElementChild as HTMLElement | null
-      frame.style.setProperty('--cfx-layout-sidebar-width', `${sidebar?.getBoundingClientRect().width ?? 0}px`)
-    }
-    updateSidebarWidth()
-    const observer = new ResizeObserver(updateSidebarWidth)
-    if (frame.firstElementChild instanceof Element) observer.observe(frame.firstElementChild)
-    window.addEventListener('resize', updateSidebarWidth)
     return () => {
-      observer.disconnect()
-      window.removeEventListener('resize', updateSidebarWidth)
       frame.removeAttribute('data-codex-files-bottom-panel-open')
       frame.style.removeProperty('--cfx-bottom-panel-height')
-      frame.style.removeProperty('--cfx-layout-sidebar-width')
     }
-  }, [bottomPanelOpen])
+  }, [bottomPanelOpen, frame])
 
   if (!bottomPanelOpen || sessionId === undefined) return null
   const nextNumber = terminalTabs.length + 1
-  return (
+  const panel = (
     <div ref={rootRef} className="cfx-bottom-panel" data-codex-files-bottom-panel>
       <div className="cfx-bottom-panel-header">
         <IconPanelLeftOutline16 className="cfx-panel-right-icon" size={14} aria-hidden />
@@ -106,4 +107,5 @@ export function BottomPanel({ useSessions, t }: BottomPanelProps) {
       </div>
     </div>
   )
+  return frame === null ? null : createPortal(panel, frame)
 }

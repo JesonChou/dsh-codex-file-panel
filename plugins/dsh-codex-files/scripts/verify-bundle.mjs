@@ -57,7 +57,7 @@ if (typeof factory !== 'function') {
   process.exit(1)
 }
 const fakeRequire = (id) => {
-  if (id === 'react' || id === 'react/jsx-runtime' || id === '@deepseek-ai/dsh-client-ui-primitives') return {}
+  if (id === 'react' || id === 'react-dom' || id === 'react/jsx-runtime' || id === '@deepseek-ai/dsh-client-ui-primitives') return {}
   throw new Error(`bundle-gate: unexpected require("${id}")`)
 }
 const exportsOut = factory(fakeRequire)

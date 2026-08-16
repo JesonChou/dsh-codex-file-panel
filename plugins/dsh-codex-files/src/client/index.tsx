@@ -58,9 +58,8 @@ export function apply(ctx: ClientContext): void {
     },
   }, CodexFilesPanel))
 
-  // The Codex-style bottom panel lives in the shell's frame-wide overlay,
-  // not inside the right details column. Its terminal survives panel toggles
-  // and spans the full app width, matching the desktop Codex layout.
+  // The Codex-style bottom panel is discovered through the shell overlay slot
+  // and portaled into the frame's grid row by BottomPanel itself.
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
     name: 'shell.overlay',
     id: 'codex-files-bottom-panel',

@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import * as React from 'react'
+import * as ReactDOM from 'react-dom'
 import * as JsxRuntime from 'react/jsx-runtime'
 
 interface BundleModule {
@@ -32,6 +33,7 @@ function loadBundle(): BundleModule {
   if (factory === undefined) throw new Error('bundle did not register a factory')
   const table = new Map<string, unknown>([
     ['react', React],
+    ['react-dom', ReactDOM],
     ['react/jsx-runtime', JsxRuntime],
     ['@deepseek-ai/dsh-client-ui-primitives', {}],
   ])

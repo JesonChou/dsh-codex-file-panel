@@ -1314,7 +1314,7 @@ body[data-ds-dark-theme] .cfx-review-badge-unstaged {
   position: relative;
   padding: 8px;
   background: var(--dsw-alias-bg-layer-1);
-  border-radius: 14px;
+  border-radius: 12px;
 }
 
 .cfx-terminal {
@@ -1322,9 +1322,9 @@ body[data-ds-dark-theme] .cfx-review-badge-unstaged {
   min-height: 0;
   overflow: hidden;
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
-  background: var(--dsw-alias-bg-base);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: none;
 }
 
 .cfx-terminal-banner {
@@ -1340,10 +1340,10 @@ body[data-ds-dark-theme] .cfx-review-badge-unstaged {
   padding: 5px 8px;
   border: 1px solid var(--dsw-alias-border-l3);
   border-radius: 7px;
-  background: #1b1b22;
-  color: #f2a1a1;
+  background: var(--dsw-alias-bg-layer-3);
+  color: var(--dsw-alias-label-primary);
   font-size: 11.5px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 4px 16px var(--dsw-alias-bg-mask-2);
 }
 
 /* Bottom panel */
@@ -1355,29 +1355,28 @@ body[data-ds-dark-theme] .cfx-review-badge-unstaged {
   display: flex;
   flex-direction: column;
   border-top: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 14px 14px 0 0;
+  border-radius: 0;
   overflow: hidden;
   background: var(--dsw-alias-bg-layer-1);
-  box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.22), 0 12px 36px rgba(0, 0, 0, 0.2);
+  box-shadow: none;
 }
 
 [data-codex-files-bottom-panel-open] {
   grid-template-rows: minmax(0, 1fr) var(--cfx-bottom-panel-height, 42vh) !important;
+  transition:
+    grid-template-rows var(--ds-transition-duration-slow) var(--ds-ease-in-out),
+    grid-template-columns var(--ds-transition-duration-slow) var(--ds-ease-in-out);
 }
 
-[data-codex-files-bottom-panel-open] > div:nth-child(1) {
+[data-codex-files-bottom-panel-open] > div:first-child {
   grid-row: 1 / 3;
 }
 
-[data-codex-files-bottom-panel-open] [data-shell-overlay] {
-  position: relative;
-  inset: auto;
-  z-index: 1;
+[data-codex-files-bottom-panel-open] > .cfx-bottom-panel {
   grid-column: 2 / 4;
   grid-row: 2;
-  height: var(--cfx-bottom-panel-height, 42vh);
   min-height: 0;
-  pointer-events: auto;
+  height: 100%;
 }
 
 .cfx-bottom-panel-header {
@@ -1462,6 +1461,7 @@ body[data-ds-dark-theme] .cfx-review-badge-unstaged {
   display: flex;
   flex-direction: column;
   position: relative;
+  background: var(--dsw-alias-bg-layer-1);
 }
 
 .cfx-bottom-panel-terminal {
@@ -1469,6 +1469,7 @@ body[data-ds-dark-theme] .cfx-review-badge-unstaged {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  background: var(--dsw-alias-bg-layer-1);
 }
 
 .cfx-bottom-panel-terminal-hidden {

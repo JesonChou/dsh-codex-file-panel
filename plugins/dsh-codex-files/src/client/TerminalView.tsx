@@ -33,16 +33,31 @@ const ANSI_DARK = {
   brightWhite: '#ffffff',
 }
 
-/** Read a live DSH design token, falling back when it is transparent/unset. */
+/** Resolve a live DSH design token through a hidden probe. CSS custom
+ * properties are inherited by the probe, so this also handles aliases whose
+ * computed value is still a `var(...)` reference in jsdom/browser edge cases. */
 function tokenColor(name: string, fallback: string): string {
-  const root = document.body ?? document.documentElement
-  const value = getComputedStyle(root).getPropertyValue(name).trim()
-  return value === '' || value === 'transparent' ? fallback : value
+  const root = document.documentElement
+  const raw = getComputedStyle(root).getPropertyValue(name).trim()
+  if (raw !== '' && raw !== 'transparent' && !raw.startsWith('var(')) return raw
+
+  const probe = document.createElement('span')
+  probe.style.position = 'fixed'
+  probe.style.pointerEvents = 'none'
+  probe.style.opacity = '0'
+  probe.style.inset = '0 auto auto 0'
+  probe.style.width = '1px'
+  probe.style.height = '1px'
+  probe.style.backgroundColor = `var(${name})`
+  document.body.appendChild(probe)
+  const value = getComputedStyle(probe).backgroundColor
+  probe.remove()
+  return value === 'rgba(0, 0, 0, 0)' || value === 'transparent' ? fallback : value
 }
 
 /** xterm theme aligned to the active DSH theme tokens. */
 function terminalTheme(): ITheme {
-  const background = tokenColor('--dsw-alias-bg-base', '#0d0d0d')
+  const background = tokenColor('--dsw-alias-bg-layer-1', '#111111')
   const foreground = tokenColor('--dsw-alias-label-primary', '#e8e8e8')
   return {
     background,
@@ -140,7 +155,8 @@ export function TerminalView(props: {
       term.options.theme = terminalTheme()
       term.refresh(0, term.rows - 1)
     })
-    themeObserver.observe(document.body, { attributes: true, attributeFilter: ['data-ds-dark-theme'] })
+    themeObserver.observe(document.body, { attributes: true, attributeFilter: ['data-ds-dark-theme', 'style'] })
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-ds-dark-theme', 'style'] })
     try {
       fit.fit()
     } catch {
