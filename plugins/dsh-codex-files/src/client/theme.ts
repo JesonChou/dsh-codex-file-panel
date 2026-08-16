@@ -1361,6 +1361,38 @@ body[data-ds-dark-theme] .cfx-review-badge-unstaged {
   box-shadow: none;
 }
 
+.cfx-bottom-panel-resize-handle {
+  flex: none;
+  height: 7px;
+  cursor: ns-resize;
+  touch-action: none;
+  position: relative;
+  z-index: 2;
+}
+
+.cfx-bottom-panel-resize-handle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 44px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--dsw-alias-border-l3);
+  opacity: 0.8;
+  transition:
+    width 120ms var(--ds-ease-in-out),
+    background 120ms var(--ds-ease-in-out),
+    opacity 120ms var(--ds-ease-in-out);
+}
+
+.cfx-bottom-panel-resize-handle:hover::after {
+  width: 72px;
+  background: var(--dsw-alias-label-tertiary);
+  opacity: 1;
+}
+
 [data-codex-files-bottom-panel-open] {
   grid-template-rows: minmax(0, 1fr) var(--cfx-bottom-panel-height, 42vh) !important;
   transition:

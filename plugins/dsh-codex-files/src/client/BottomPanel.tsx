@@ -9,13 +9,20 @@ import {
   IconPlusOutline16,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  useCallback, useEffect, useLayoutEffect, useRef, useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import { createPortal } from 'react-dom'
 import { TerminalView } from './TerminalView.tsx'
 import { toggleBottomPanel, useWorkbenchUi } from './workbench-store.ts'
 
 export type BottomPanelProps =
   PropsRuntime<'shell.overlay'> & PropsLocale<'codex-files'>
+
+const MIN_TERMINAL_HEIGHT = 160
+const DEFAULT_TERMINAL_HEIGHT = '42vh'
+const MAX_TERMINAL_HEIGHT_RATIO = 0.78
 
 /** The DSH three-column frame is the overlay slot's parent. */
 function findLayoutFrame(): HTMLElement | null {
@@ -31,7 +38,9 @@ export function BottomPanel({ useSessions, t }: BottomPanelProps) {
   const [terminalTabs, setTerminalTabs] = useState<string[]>(['bottom-terminal-1'])
   const [activeTab, setActiveTab] = useState('bottom-terminal-1')
   const [frame, setFrame] = useState<HTMLElement | null>(() => findLayoutFrame())
+  const [heightPx, setHeightPx] = useState<number | null>(null)
   const nextTabNumber = useRef(1)
+  const resizeRef = useRef<{ startY: number; startHeight: number } | null>(null)
 
   useEffect(() => {
     setTerminalTabs(['bottom-terminal-1'])
@@ -51,6 +60,32 @@ export function BottomPanel({ useSessions, t }: BottomPanelProps) {
     setActiveTab(id)
   }, [])
 
+  const beginResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const panel = rootRef.current
+    if (panel === null) return
+    event.currentTarget.setPointerCapture(event.pointerId)
+    resizeRef.current = {
+      startY: event.clientY,
+      startHeight: panel.getBoundingClientRect().height,
+    }
+  }, [])
+
+  const resizeTerminal = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = resizeRef.current
+    if (start === null || !event.currentTarget.hasPointerCapture(event.pointerId)) return
+    const frameHeight = frame?.getBoundingClientRect().height ?? window.innerHeight
+    const maxHeight = Math.max(MIN_TERMINAL_HEIGHT, Math.round(frameHeight * MAX_TERMINAL_HEIGHT_RATIO))
+    const nextHeight = Math.min(maxHeight, Math.max(MIN_TERMINAL_HEIGHT, start.startHeight + start.startY - event.clientY))
+    setHeightPx(nextHeight)
+  }, [frame])
+
+  const endResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    resizeRef.current = null
+  }, [])
+
   useLayoutEffect(() => {
     if (frame === null) {
       setFrame(findLayoutFrame())
@@ -58,16 +93,31 @@ export function BottomPanel({ useSessions, t }: BottomPanelProps) {
     }
     if (!bottomPanelOpen) return
     frame.setAttribute('data-codex-files-bottom-panel-open', 'true')
-    frame.style.setProperty('--cfx-bottom-panel-height', '42vh')
     return () => {
       frame.removeAttribute('data-codex-files-bottom-panel-open')
       frame.style.removeProperty('--cfx-bottom-panel-height')
     }
   }, [bottomPanelOpen, frame])
 
+  useLayoutEffect(() => {
+    if (frame === null || !bottomPanelOpen) return
+    frame.style.setProperty('--cfx-bottom-panel-height', heightPx === null ? DEFAULT_TERMINAL_HEIGHT : `${heightPx}px`)
+  }, [bottomPanelOpen, frame, heightPx])
+
   if (!bottomPanelOpen || sessionId === undefined) return null
   const panel = (
     <div ref={rootRef} className="cfx-bottom-panel" data-codex-files-bottom-panel>
+      <div
+        className="cfx-bottom-panel-resize-handle"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label={t('panel.resizeBottom')}
+        title={t('panel.resizeBottom')}
+        onPointerDown={beginResize}
+        onPointerMove={resizeTerminal}
+        onPointerUp={endResize}
+        onPointerCancel={endResize}
+      />
       <div className="cfx-bottom-panel-header">
         <div className="cfx-terminal-identity">
           <TerminalGlyph />
