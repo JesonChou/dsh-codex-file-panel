@@ -1,2 +1,4 @@
 packages:
   - plugins/*
+allowBuilds:
+  node-pty: true

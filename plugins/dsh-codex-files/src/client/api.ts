@@ -123,3 +123,59 @@ export function writeFile(sessionId: string, path: string, content: string): Pro
     body: JSON.stringify({ sessionId, path, content }),
   }).then(r => parse<WriteFileResult>(r))
 }
+
+/** One file's old/new review snapshot. */
+export interface ReviewFileResult {
+  ok: true
+  path: string
+  staged: boolean
+  oldText: string | null
+  newText: string | null
+  binary: boolean
+}
+
+/** Read one changed file's old and new text for the review diff. */
+export function reviewFile(sessionId: string, path: string, staged: boolean): Promise<FileRouteResult<ReviewFileResult>> {
+  const query = new URLSearchParams({ sessionId, path, staged: staged ? '1' : '0' })
+  return fetch(`${ROUTE_PREFIX}/review/file?${query.toString()}`).then(r => parse<ReviewFileResult>(r))
+}
+
+/** Successful mutation response for review actions. */
+export interface ReviewActionResult {
+  ok: true
+}
+
+/** Stage one file, or all changes when path is null. */
+export function reviewStage(sessionId: string, path: string | null): Promise<FileRouteResult<ReviewActionResult>> {
+  return fetch(`${ROUTE_PREFIX}/review/stage`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ sessionId, path }),
+  }).then(r => parse<ReviewActionResult>(r))
+}
+
+/** Unstage one file, or all staged changes when path is null. */
+export function reviewUnstage(sessionId: string, path: string | null): Promise<FileRouteResult<ReviewActionResult>> {
+  return fetch(`${ROUTE_PREFIX}/review/unstage`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ sessionId, path }),
+  }).then(r => parse<ReviewActionResult>(r))
+}
+
+/** Commit the currently staged changes. */
+export function reviewCommit(sessionId: string, message: string): Promise<FileRouteResult<ReviewActionResult>> {
+  return fetch(`${ROUTE_PREFIX}/review/commit`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ sessionId, message }),
+  }).then(r => parse<ReviewActionResult>(r))
+}
+
+/** WebSocket URL for one terminal instance. */
+export function terminalUrl(sessionId: string, tabId: string): string {
+  const url = new URL(`${ROUTE_PREFIX}/terminal`, window.location.origin)
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  url.search = new URLSearchParams({ sessionId, tab: tabId }).toString()
+  return url.toString()
+}

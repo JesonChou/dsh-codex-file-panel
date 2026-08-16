@@ -24,7 +24,7 @@ const SEED_WORDS = new Set([
   '@deepseek-ai/dsh-client-schema-form',
 ])
 
-const SHIMMED_WORDS = new Set(['module', 'url'])
+const SHIMMED_WORDS = new Set(['module', 'url', '@napi-rs/canvas'])
 
 const requires = [...bundle.matchAll(/require\("([^"]+)"\)/g)].map(match => match[1])
 const bad = requires.filter(word =>
@@ -38,7 +38,8 @@ if (bad.length > 0) {
 }
 
 for (const word of SHIMMED_WORDS) {
-  if (requires.includes(word) && !new RegExp(`id === ["']${word}["']`).test(bundle)) {
+  const escaped = word.replaceAll(/[$()*+.?[\\\]^{|}]/g, '\\$&')
+  if (requires.includes(word) && !new RegExp(`id === ["']${escaped}["']`).test(bundle)) {
     console.error(`bundle-gate: require("${word}") present without the banner shim`)
     process.exit(1)
   }

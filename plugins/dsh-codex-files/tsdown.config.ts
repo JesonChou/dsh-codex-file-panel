@@ -30,7 +30,7 @@ export default [
     fixedExtension: false,
     // Official packages (@deepseek-ai/*) are injected by the profile's pnpm
     // closure at mount time — never bundled.
-    external: [/@deepseek-ai\//],
+    external: [/@deepseek-ai\//, /^node-pty$/, /^ws$/],
   },
   {
     // ── Browser half (client side) ──
@@ -43,6 +43,12 @@ export default [
     dts: false,
     clean: false,
     external: [/@deepseek-ai\/dsh-client-/, /^react($|\/)/, /^react-dom($|\/)/, 'cordis'],
+    deps: {
+      // pdfjs-dist is a runtime dependency for the host's asset route, but the
+      // browser half must still inline it: the client module table has no
+      // pdfjs-dist entry, and PDF rendering is bundled into lib/client.js.
+      alwaysBundle: [/^pdfjs-dist(\/|$)/],
+    },
     define: {
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production'),
     },
@@ -53,7 +59,7 @@ export default [
       // wrapper also shims the Node 'module' builtin that rolldown injects
       // when bundling CJS dependencies (fflate): the frozen module table has
       // no such word, so the shim returns a stub instead of a load-time miss.
-      banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(PLUGIN_ID)}, factory: (requireOriginal) => { var require = function(id) { if (id === 'module') { return { exports: {}, createRequire: function() { return function() { throw new Error('browser bundle: module not found: ' + arguments[0]) } } } } if (id === 'url') { return { pathToFileURL: function(p) { return new URL('file://' + String(p).replace(/\\\\/g, '/')) } } } return requireOriginal(id) }; var module = { exports: {} }; var exports = module.exports;`,
+      banner: `window.__ModuleLoader__.load({ id: ${JSON.stringify(PLUGIN_ID)}, factory: (requireOriginal) => { var require = function(id) { if (id === 'module') { return { exports: {}, createRequire: function() { return function() { throw new Error('browser bundle: module not found: ' + arguments[0]) } } } } if (id === 'url') { return { pathToFileURL: function(p) { return new URL('file://' + String(p).replace(/\\\\/g, '/')) } } } if (id === '@napi-rs/canvas') { return { createCanvas: function() { throw new Error('@napi-rs/canvas is not available in the browser bundle') } } } return requireOriginal(id) }; var module = { exports: {} }; var exports = module.exports;`,
       footer: 'return exports; } });',
     },
   },

@@ -10,15 +10,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   IconBrowseOutline16, IconCheckOutline16, IconChevronLeftOutline14,
   IconCloseOutline16, IconCodeOutline16, IconCopyOutline16, IconEditOutline16,
-  IconPanelLeftOutline16, IconRefreshOutline16, IconRightUpOutline16,
+  IconPanelLeftOutline16, IconRefreshOutline16, IconRightUpOutline16, IconFullscreenOutline16,
   DiffBlock, writeClipboard,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { FileRouteFailure } from './api.ts'
 import { gitInfo, readFile, writeFile } from './api.ts'
+import { BrowserView } from './BrowserView.tsx'
 import { FileTree } from './FileTree.tsx'
 import { isBinaryPreviewKind, previewKindFor } from './preview-logic.ts'
 import { FilePreview } from './preview.tsx'
+import { ReviewView } from './ReviewView.tsx'
+import { TerminalView } from './TerminalView.tsx'
+import { toggleBottomPanel, useWorkbenchUi } from './workbench-store.ts'
 import {
   collectSessionFiles, sessionFilesEqual, splitDisplayPath,
   toDiffHunks, type SessionFile,
@@ -28,6 +32,8 @@ import {
 export interface PanelInjected {
   /** Close the details column (layout geometry stays with ctx.layout). */
   closeDetails: () => void
+  /** Toggle the left app sidebar (Codex-style chrome control). */
+  toggleSidebar: () => void
   /** Open a filesystem path with the host OS default application. */
   openPath: (path: string) => void
 }
@@ -35,6 +41,9 @@ export interface PanelInjected {
 /** Full panel props: the details-slot runtime share + injected + locale. */
 export type CodexFilesPanelProps =
   PropsRuntime<'details'> & PanelInjected & PropsLocale<'codex-files'>
+
+/** The four top-level workbench surfaces in the right column. */
+type WorkbenchView = 'files' | 'review' | 'browser' | 'terminal'
 
 /** Localized text for one route failure code. */
 function failureText(t: PropsLocale<'codex-files'>['t'], failure: FileRouteFailure): string {
@@ -67,7 +76,7 @@ interface OpenTab {
 const EMPTY_TABS: OpenTab[] = []
 
 export function CodexFilesPanel({
-  sessionId, useSession, useSessions, closeDetails, openPath, t,
+  sessionId, useSession, useSessions, closeDetails, toggleSidebar, openPath, t,
 }: CodexFilesPanelProps) {
   const cwd = useSessions(s => s.byId[sessionId]?.cwd)
   const files = useSession(s => collectSessionFiles(s), sessionFilesEqual)
@@ -80,9 +89,11 @@ export function CodexFilesPanel({
   const [copiedFlash, setCopiedFlash] = useState(false)
   const [viewMode, setViewMode] = useState<'content' | 'diff'>('content')
   const [viewTab, setViewTab] = useState<'workspace' | 'activity'>('workspace')
+  const [workbenchView, setWorkbenchView] = useState<WorkbenchView>('files')
   const [branch, setBranch] = useState<string | null>(null)
   const [repo, setRepo] = useState<string | null>(null)
   const [statusMap, setStatusMap] = useState<Record<string, string>>({})
+  const { bottomPanelOpen } = useWorkbenchUi()
   const activeTab = tabs.find(tab => tab.path === activePath)
   const activeFile = useMemo(
     () => files.find(file => file.path === activePath),
@@ -100,6 +111,7 @@ export function CodexFilesPanel({
     setCopiedFlash(false)
     setViewMode('content')
     setViewTab('workspace')
+    setWorkbenchView('files')
     setBranch(null)
     setRepo(null)
     setStatusMap({})
@@ -141,6 +153,12 @@ export function CodexFilesPanel({
     setTabs(prev => prev.some(tab => tab.path === path) ? prev : [...prev, { path, content: '', editing: false, draft: '', refreshKey: 0 }])
     if (!binary) void loadInto(path)
   }, [loadInto])
+
+  /** Review surface → Files tab hand-off for one changed path. */
+  const openFileFromReview = useCallback((path: string) => {
+    setWorkbenchView('files')
+    openFile(path)
+  }, [openFile])
 
   /** Close one tab; the active tab falls back to its neighbor. */
   const closeTab = useCallback((path: string) => {
@@ -218,10 +236,12 @@ export function CodexFilesPanel({
     <div className="cfx-panel" data-codex-files-panel>
       <div className="cfx-header">
         <IconBrowseOutline16 size={14} aria-hidden />
-        <span className="cfx-title">{t('panel.title')}</span>
-        <span className="cfx-count">{t('list.files', { count: String(files.length) })}</span>
+        <span className="cfx-title">{t(workbenchView === 'files' ? 'panel.title' : workbenchView === 'review' ? 'review.title' : workbenchView === 'browser' ? 'browser.title' : 'terminal.title')}</span>
+        {workbenchView === 'files' && (
+          <span className="cfx-count">{t('list.files', { count: String(files.length) })}</span>
+        )}
         <span className="cfx-spacer" />
-        {activePath !== null && (
+        {workbenchView === 'files' && activePath !== null && (
           <button
             type="button" className="cfx-icon-button" title={t('panel.refresh')}
             aria-label={t('panel.refresh')}
@@ -232,6 +252,28 @@ export function CodexFilesPanel({
           </button>
         )}
         <button
+          type="button" className="cfx-icon-button" title={t('panel.toggleSidebar')}
+          aria-label={t('panel.toggleSidebar')}
+          onClick={toggleSidebar}
+        >
+          <IconPanelLeftOutline16 size={14} aria-hidden />
+        </button>
+        <button
+          type="button" className={`cfx-icon-button${bottomPanelOpen ? ' cfx-icon-button-active' : ''}`}
+          title={t('panel.toggleBottom')}
+          aria-label={t('panel.toggleBottom')}
+          onClick={toggleBottomPanel}
+        >
+          <BottomPanelGlyph />
+        </button>
+        <button
+          type="button" className="cfx-icon-button" title={t('panel.expand')}
+          aria-label={t('panel.expand')}
+          onClick={closeDetails}
+        >
+          <IconFullscreenOutline16 size={14} aria-hidden />
+        </button>
+        <button
           type="button" className="cfx-icon-button" title={t('panel.close')}
           aria-label={t('panel.close')}
           onClick={closeDetails}
@@ -240,7 +282,31 @@ export function CodexFilesPanel({
         </button>
       </div>
 
-      {activeTab === undefined && (
+      <div className="cfx-workbench-tabs" role="tablist">
+        {(['files', 'review', 'browser', 'terminal'] as const).map(view => (
+          <button
+            key={view} type="button" role="tab"
+            className={`cfx-workbench-tab${workbenchView === view ? ' cfx-workbench-tab-active' : ''}`}
+            aria-selected={workbenchView === view}
+            onClick={() => { setWorkbenchView(view) }}
+          >
+            <WorkbenchGlyph view={view} />
+            <span>{t(view === 'files' ? 'panel.title' : view === 'review' ? 'review.title' : view === 'browser' ? 'browser.title' : 'terminal.title')}</span>
+          </button>
+        ))}
+      </div>
+
+      {workbenchView !== 'files' && (
+        <div className="cfx-workbench-body">
+          {workbenchView === 'review' && (
+            <ReviewView sessionId={sessionId} t={t} onOpenFile={openFileFromReview} />
+          )}
+          {workbenchView === 'browser' && <BrowserView t={t} />}
+          {workbenchView === 'terminal' && <TerminalView sessionId={sessionId} tabId="right-terminal" t={t} />}
+        </div>
+      )}
+
+      {workbenchView === 'files' && activeTab === undefined && (
         <div className="cfx-viewtabs" role="tablist">
           <button
             type="button" role="tab" aria-selected={viewTab === 'workspace'}
@@ -259,7 +325,7 @@ export function CodexFilesPanel({
         </div>
       )}
 
-      {activeTab === undefined ? (
+      {workbenchView === 'files' && (activeTab === undefined ? (
         viewTab === 'workspace'
           ? <FileTree sessionId={sessionId} status={statusMap} onOpenFile={openFile} t={t} />
           : <FileList files={files} t={t} onOpen={openFile} />
@@ -397,8 +463,53 @@ export function CodexFilesPanel({
             {dirtyCount > 1 && <span>· {dirtyCount} {t('file.unsaved')}</span>}
           </div>
         </div>
-      )}
+      ))}
     </div>
+  )
+}
+
+/** Inline glyphs for the Codex-style workbench tab bar. */
+function WorkbenchGlyph(props: { view: WorkbenchView }) {
+  const size = 15
+  if (props.view === 'files') {
+    return (
+      <svg viewBox="0 0 16 16" width={size} height={size} aria-hidden>
+        <path d="M1.5 4.5A1.5 1.5 0 0 1 3 3h2.6l1.2 1.5H13A1.5 1.5 0 0 1 14.5 6v5.5A1.5 1.5 0 0 1 13 13H3a1.5 1.5 0 0 1-1.5-1.5v-7z"
+          fill="none" stroke="currentColor" strokeWidth="1.2" />
+      </svg>
+    )
+  }
+  if (props.view === 'review') {
+    return (
+      <svg viewBox="0 0 16 16" width={size} height={size} aria-hidden>
+        <path d="M3 1.5h8L14.5 5v9a1 1 0 0 1-1 1h-10a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" strokeWidth="1.2" />
+        <path d="M10 1.5V5h3.5M5 8.5l1.5 1.5 3-3.5" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    )
+  }
+  if (props.view === 'browser') {
+    return (
+      <svg viewBox="0 0 16 16" width={size} height={size} aria-hidden>
+        <circle cx="8" cy="8" r="5.7" fill="none" stroke="currentColor" strokeWidth="1.2" />
+        <path d="M2.8 8h10.4M8 2.3c1.5 1.4 2.2 3.2 2.2 5.7S9.5 12.3 8 13.7C6.5 12.3 5.8 10.5 5.8 8S6.5 3.7 8 2.3z"
+          fill="none" stroke="currentColor" strokeWidth="1.1" />
+      </svg>
+    )
+  }
+  return (
+    <svg viewBox="0 0 16 16" width={size} height={size} aria-hidden>
+      <path d="M2 3.5h12v6H2zM6 9.5v3M10 9.5v3M2.5 13.5h11" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** Small bottom-panel toggle glyph. */
+function BottomPanelGlyph() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden>
+      <path d="M2 11V4.5A1.5 1.5 0 0 1 3.5 3h9A1.5 1.5 0 0 1 14 4.5V11M2 11h12M2 11v.5A1.5 1.5 0 0 0 3.5 13h9a1.5 1.5 0 0 0 1.5-1.5V11"
+        fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   )
 }
 

@@ -7,7 +7,7 @@
  */
 import { strToU8 } from 'fflate'
 import { describe, expect, it } from 'vitest'
-import { clampPdfWidth } from '../src/client/PdfPreview.tsx'
+import { clampPdfWidth, pdfPixelRatio } from '../src/client/PdfPreview.tsx'
 
 /** One-page PDF: catalog → pages → page with a Hello text content stream. */
 const MINIMAL_PDF = `%PDF-1.4
@@ -76,5 +76,14 @@ describe('clampPdfWidth', () => {
   it('falls back to the default for a non-positive width', () => {
     expect(clampPdfWidth(0)).toBe(720)
     expect(clampPdfWidth(Number.NaN)).toBe(720)
+  })
+})
+
+describe('pdfPixelRatio', () => {
+  it('clamps the device-pixel ratio into the sharp-but-bounded range', () => {
+    expect(pdfPixelRatio(undefined)).toBe(1)
+    expect(pdfPixelRatio(0.5)).toBe(1)
+    expect(pdfPixelRatio(2)).toBe(2)
+    expect(pdfPixelRatio(4)).toBe(2.5)
   })
 })

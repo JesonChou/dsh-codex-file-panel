@@ -60,6 +60,11 @@
     "@deepseek-ai/schemastery": "*",
     "react": "^18.2.0"
   },
+  "dependencies": {
+    "node-pty": "^1.1.0",
+    "pdfjs-dist": "^4.10.38",
+    "ws": "^8.18.0"
+  },
   "devDependencies": {
     "@deepseek-ai/cordis": "link:./dsh-dev/ai/cordis",
     "@deepseek-ai/dsh-client-locale": "link:./dsh-dev/ai/dsh-client-locale",
@@ -74,11 +79,13 @@
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.4",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^5.5.0",
     "@types/node": "^22.0.0",
     "@types/react": "~18.3.1",
+    "@types/ws": "^8.5.10",
     "fflate": "^0.8.2",
     "jsdom": "^30.0.1",
-    "pdfjs-dist": "^4.10.38",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "tsdown": "^0.22.2",

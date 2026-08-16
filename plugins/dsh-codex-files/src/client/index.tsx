@@ -11,6 +11,7 @@ import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-layout/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
+import { BottomPanel } from './BottomPanel.tsx'
 import { CodexFilesPanel, PanelToggle, type PanelInjected, type PanelToggleInjected } from './CodexFilesPanel.tsx'
 import { NS, en, zh } from './locales.ts'
 import { isDetailsCollapsed } from './panel-toggle.ts'
@@ -51,10 +52,21 @@ export function apply(ctx: ClientContext): void {
       ctx.layout.openDetails()
       return {
         closeDetails: () => { ctx.layout.closeDetails() },
+        toggleSidebar: () => { ctx.layout.toggleSidebar() },
         openPath: (path: string) => { void ctx.workspaces.openPath(path) },
       }
     },
   }, CodexFilesPanel))
+
+  // The Codex-style bottom panel lives in the shell's frame-wide overlay,
+  // not inside the right details column. Its terminal survives panel toggles
+  // and spans the full app width, matching the desktop Codex layout.
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay',
+    id: 'codex-files-bottom-panel',
+    order: 100,
+    locale: NS,
+  }, BottomPanel))
 
   // The session header action that toggles the panel, exactly like the
   // left sidebar's own toggle: the click decides open vs close from the

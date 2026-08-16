@@ -8,14 +8,18 @@
  */
 import { readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
-import { basename, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { createRequire } from 'node:module'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { promisify } from 'node:util'
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { Duplex } from 'node:stream'
+import { WebSocket, WebSocketServer } from 'ws'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import { SessionId, type SessionId as SessionIdBrand } from '@deepseek-ai/dsh-session'
 import z from '@deepseek-ai/schemastery'
 import { contentTypeFor } from './content-types.ts'
+import { defaultShell, ensureSpawnHelper, PtyManager } from './pty-manager.ts'
 
 export const name = 'dsh-codex-files'
 
@@ -37,6 +41,15 @@ export interface Config {
    */
   maxRawBytes?: number
   /**
+   * Maximum concurrent user terminals per session. The client opens at most
+   * this many tabs before reporting the limit.
+   */
+  maxTerminalsPerSession?: number
+  /** How long a disconnected terminal survives awaiting reconnect (ms). */
+  terminalReconnectGraceMs?: number
+  /** Optional terminal shell override (empty resolves by platform). */
+  terminalShell?: string
+  /**
    * Directory names the workspace tree hides. Defaults keep the tree
    * scannable (node_modules, .git, dist, build, .dsh).
    */
@@ -47,6 +60,9 @@ export const Config: z<Config> = z.object({
   maxReadBytes: z.number().min(1024).max(64 * 1024 * 1024).step(1).default(2 * 1024 * 1024),
   maxWriteBytes: z.number().min(1024).max(64 * 1024 * 1024).step(1).default(2 * 1024 * 1024),
   maxRawBytes: z.number().min(1024).max(256 * 1024 * 1024).step(1).default(32 * 1024 * 1024),
+  maxTerminalsPerSession: z.number().min(1).max(12).step(1).default(3),
+  terminalReconnectGraceMs: z.number().min(0).max(60_000).step(1).default(5_000),
+  terminalShell: z.string().default(''),
   excludeDirs: z.array(z.string()).default(['node_modules', '.git', 'dist', 'build', '.dsh', '.next', '.turbo', 'coverage', '__pycache__']),
 })
 
@@ -54,6 +70,16 @@ export const Config: z<Config> = z.object({
 export const ROUTE_PREFIX = '/plugins/dsh-codex-files'
 
 export { contentTypeFor, RAW_CONTENT_TYPES } from './content-types.ts'
+
+/** Absolute root of the bundled pdf.js package, resolved at plugin load. */
+function pdfjsAssetRoot(): string | null {
+  try {
+    const require = createRequire(import.meta.url)
+    return dirname(require.resolve('pdfjs-dist/package.json'))
+  } catch {
+    return null
+  }
+}
 
 /** A text file's encoded byte length may exceed its string length; read with headroom. */
 const DECODE_HEADROOM = 4
@@ -72,6 +98,8 @@ export type RouteErrorCode =
   | 'read-failed'
   | 'write-failed'
   | 'directory-unreadable'
+  | 'review-failed'
+  | 'terminal-error'
 
 /** One route failure: code + human message (English; the panel localizes). */
 export class RouteError extends Error {
@@ -115,6 +143,20 @@ async function gitStatusMap(cwd: string): Promise<Map<string, string>> {
     // Not a repository (or git unavailable): no decorations.
   }
   return map
+}
+
+/** Run a git subcommand and return stdout, or null when git fails. */
+async function gitOutput(cwd: string, args: string[]): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync('git', ['-C', cwd, ...args], {
+      timeout: GIT_TIMEOUT_MS,
+      windowsHide: true,
+      maxBuffer: 16 * 1024 * 1024,
+    })
+    return stdout
+  } catch {
+    return null
+  }
 }
 
 /** Resolve a request path against the cwd, rejecting anything outside it. */
@@ -178,6 +220,13 @@ async function readJsonBody(req: IncomingMessage, maxBytes: number): Promise<unk
 export function apply(ctx: Context, config: Config): void {
   const maxRead = config.maxReadBytes ?? 2 * 1024 * 1024
   const maxWrite = config.maxWriteBytes ?? 2 * 1024 * 1024
+  const terminalShell = config.terminalShell ?? ''
+  const ptyManager = new PtyManager(
+    terminalShell === '' ? defaultShell() : terminalShell,
+    config.maxTerminalsPerSession ?? 3,
+    config.terminalReconnectGraceMs ?? 5_000,
+  )
+  ensureSpawnHelper()
 
   const registerRoute = (path: string, handler: (req: IncomingMessage, res: ServerResponse) => Promise<void>): void => {
     ctx.effect(() => ctx.webServer.register({
@@ -186,6 +235,69 @@ export function apply(ctx: Context, config: Config): void {
       handler,
     }), `dsh-codex-files: ${path} route`)
   }
+
+  // pdf.js renders client-side, but its CMap and standard-font tables are
+  // binary files outside the browser bundle. Serve them from the installed
+  // pdfjs-dist package under the plugin's own asset prefix; the client passes
+  // these URLs to getDocument so CJK and non-embedded standard fonts render
+  // without network access or a build-time asset copy.
+  const pdfAssetBase = `${ROUTE_PREFIX}/pdf-assets`
+  ctx.effect(() => ctx.webServer.register({
+    kind: 'prefix',
+    path: pdfAssetBase,
+    handler: async (req, res) => {
+      try {
+        const addr = req.socket.remoteAddress
+        if (addr !== '127.0.0.1' && addr !== '::1' && addr !== '::ffff:127.0.0.1') {
+          res.writeHead(403)
+          res.end('forbidden')
+          return
+        }
+        if (req.method !== 'GET') {
+          res.writeHead(405)
+          res.end('method not allowed')
+          return
+        }
+        const url = new URL(req.url ?? '/', 'http://localhost')
+        const relativeAsset = url.pathname.slice(pdfAssetBase.length).replace(/^[/]+/, '')
+        const [kind, ...nameParts] = relativeAsset.split('/')
+        const name = nameParts.join('/')
+        if ((kind !== 'cmaps' && kind !== 'fonts') || name === '' || name.includes('..')) {
+          res.writeHead(404)
+          res.end('not found')
+          return
+        }
+        if (!/^[A-Za-z0-9_.-]+$/.test(name)) {
+          res.writeHead(400)
+          res.end('bad asset name')
+          return
+        }
+        const root = pdfjsAssetRoot()
+        if (root === null) {
+          res.writeHead(404)
+          res.end('pdf.js assets unavailable')
+          return
+        }
+        const absolute = resolve(root, kind, name)
+        const inside = relative(resolve(root, kind), absolute)
+        if (inside === '' || inside === '..' || inside.startsWith(`..${sep}`) || isAbsolute(inside)) {
+          res.writeHead(403)
+          res.end('forbidden')
+          return
+        }
+        const body = await readFile(absolute)
+        res.writeHead(200, {
+          'content-type': 'application/octet-stream',
+          'content-length': body.length,
+          'cache-control': 'no-store',
+        })
+        res.end(body)
+      } catch {
+        res.writeHead(404)
+        res.end('not found')
+      }
+    },
+  }), 'dsh-codex-files: pdf.js asset route')
 
   const handle = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     try {
@@ -359,6 +471,81 @@ export function apply(ctx: Context, config: Config): void {
         return
       }
 
+      if (req.method === 'GET' && url.pathname === `${ROUTE_PREFIX}/review/file`) {
+        const cwd = sessionCwd(ctx, sessionId)
+        if (path === null || path === '') throw new RouteError('invalid-request', 'path is required')
+        const abs = resolveInside(cwd, path)
+        const staged = url.searchParams.get('staged') === '1'
+        let oldText: string | null = null
+        let newText: string | null = null
+        if (staged) {
+          oldText = await gitOutput(cwd, ['show', `HEAD:${path}`])
+          newText = await gitOutput(cwd, ['show', `:${path}`])
+        } else {
+          oldText = await gitOutput(cwd, ['show', `:${path}`])
+          const buffer = await readFile(abs).catch(() => null)
+          if (buffer !== null) newText = buffer.includes(0) ? null : buffer.toString('utf8')
+        }
+        const binary = (oldText !== null && oldText.includes('\0')) || (newText !== null && newText.includes('\0'))
+        json(res, 200, { ok: true, path, staged, oldText, newText, binary })
+        return
+      }
+
+      const reviewBody = (await readJsonBody(req, 256 * 1024)) as {
+        sessionId?: unknown
+        path?: unknown
+        message?: unknown
+      } | null
+      const reviewSession = reviewBody !== null && typeof reviewBody.sessionId === 'string' ? reviewBody.sessionId : null
+      const reviewPath = reviewBody !== null && typeof reviewBody.path === 'string' && reviewBody.path !== '' ? reviewBody.path : null
+
+      if (req.method === 'POST' && url.pathname === `${ROUTE_PREFIX}/review/stage`) {
+        if (reviewSession === null) throw new RouteError('invalid-request', 'sessionId is required')
+        const cwd = sessionCwd(ctx, reviewSession)
+        try {
+          await execFileAsync('git', ['-C', cwd, ...(reviewPath === null ? ['add', '-A'] : ['add', '--', reviewPath])], {
+            timeout: GIT_TIMEOUT_MS,
+            windowsHide: true,
+          })
+        } catch {
+          throw new RouteError('review-failed', `cannot stage "${reviewPath ?? '*'}"`)
+        }
+        json(res, 200, { ok: true })
+        return
+      }
+
+      if (req.method === 'POST' && url.pathname === `${ROUTE_PREFIX}/review/unstage`) {
+        if (reviewSession === null) throw new RouteError('invalid-request', 'sessionId is required')
+        const cwd = sessionCwd(ctx, reviewSession)
+        try {
+          await execFileAsync('git', ['-C', cwd, 'reset', ...(reviewPath === null ? [] : ['--', reviewPath])], {
+            timeout: GIT_TIMEOUT_MS,
+            windowsHide: true,
+          })
+        } catch {
+          throw new RouteError('review-failed', `cannot unstage "${reviewPath ?? '*'}"`)
+        }
+        json(res, 200, { ok: true })
+        return
+      }
+
+      if (req.method === 'POST' && url.pathname === `${ROUTE_PREFIX}/review/commit`) {
+        if (reviewSession === null) throw new RouteError('invalid-request', 'sessionId is required')
+        const message = reviewBody !== null && typeof reviewBody.message === 'string' ? reviewBody.message.trim() : ''
+        if (message === '') throw new RouteError('invalid-request', 'commit message is required')
+        const cwd = sessionCwd(ctx, reviewSession)
+        try {
+          await execFileAsync('git', ['-C', cwd, 'commit', '-m', message], {
+            timeout: 20_000,
+            windowsHide: true,
+          })
+        } catch {
+          throw new RouteError('review-failed', `cannot commit "${message}"`)
+        }
+        json(res, 200, { ok: true })
+        return
+      }
+
       json(res, 404, { ok: false, code: 'invalid-request', message: 'unknown route' })
     } catch (error) {
       if (error instanceof RouteError) {
@@ -376,4 +563,98 @@ export function apply(ctx: Context, config: Config): void {
   registerRoute(`${ROUTE_PREFIX}/list`, handle)
   registerRoute(`${ROUTE_PREFIX}/find`, handle)
   registerRoute(`${ROUTE_PREFIX}/raw`, handle)
+  registerRoute(`${ROUTE_PREFIX}/review/file`, handle)
+  registerRoute(`${ROUTE_PREFIX}/review/stage`, handle)
+  registerRoute(`${ROUTE_PREFIX}/review/unstage`, handle)
+  registerRoute(`${ROUTE_PREFIX}/review/commit`, handle)
+
+  const terminalWss = new WebSocketServer({ noServer: true })
+  ctx.effect(() => ctx.webServer.registerUpgrade({
+    path: `${ROUTE_PREFIX}/terminal`,
+    handler: (req, socket, head) => {
+      const addr = req.socket.remoteAddress
+      if (addr !== '127.0.0.1' && addr !== '::1' && addr !== '::ffff:127.0.0.1') {
+        socket.destroy()
+        return
+      }
+      terminalWss.handleUpgrade(
+        req as unknown as IncomingMessage,
+        socket as unknown as Duplex,
+        head as Buffer,
+        (ws) => { void attachTerminal(ctx, ptyManager, ws, req) },
+      )
+    },
+  }), 'dsh-codex-files: terminal WebSocket')
+
+  ctx.effect(() => () => {
+    ptyManager.disposeAll()
+    terminalWss.close()
+  }, 'dsh-codex-files: terminal teardown')
+}
+
+/** Wire one WebSocket to a session-scoped PTY and stream both directions. */
+async function attachTerminal(
+  ctx: Context,
+  ptyManager: PtyManager,
+  ws: WebSocket,
+  req: IncomingMessage,
+): Promise<void> {
+  try {
+    const url = new URL(req.url ?? '/', 'http://localhost')
+    const sessionId = url.searchParams.get('sessionId')
+    const tabId = url.searchParams.get('tab')
+    if (sessionId === null || tabId === null) {
+      ws.close(1008, 'sessionId and tab are required')
+      return
+    }
+    const cwd = sessionCwd(ctx, sessionId)
+    const handle = ptyManager.open(sessionId, tabId, cwd, 80, 24)
+    if (handle.transcript !== '') ws.send(handle.transcript)
+    const onData = (data: string): void => {
+      if (ws.readyState === WebSocket.OPEN && ws.bufferedAmount < 4 * 1024 * 1024) {
+        ws.send(data)
+      }
+    }
+    const onExit = ({ exitCode }: { exitCode: number; signal?: number }): void => {
+      onData(`\r\n[process exited with code ${String(exitCode)}]\r\n`)
+    }
+    const dataSub = handle.pty.onData(onData)
+    const exitSub = handle.pty.onExit(onExit)
+    ws.on('message', (data) => {
+      const text = data.toString('utf8')
+      let control: { type?: unknown; cols?: unknown; rows?: unknown } | null = null
+      try {
+        const parsed: unknown = JSON.parse(text)
+        if (parsed !== null && typeof parsed === 'object') {
+          control = parsed as { type?: unknown; cols?: unknown; rows?: unknown }
+        }
+      } catch {
+        // Raw terminal input.
+      }
+      if (control !== null && control.type === 'close') {
+        ptyManager.scheduleClose(handle.key, 0)
+        return
+      }
+      if (handle.exited) return
+      if (
+        control !== null
+        && control.type === 'resize'
+        && typeof control.cols === 'number' && typeof control.rows === 'number'
+      ) {
+        handle.pty.resize(
+          Math.max(2, Math.floor(control.cols)),
+          Math.max(2, Math.floor(control.rows)),
+        )
+      } else {
+        handle.pty.write(text)
+      }
+    })
+    ws.on('close', () => {
+      dataSub.dispose()
+      exitSub.dispose()
+      ptyManager.scheduleClose(handle.key, ptyManager.reconnectGraceMs)
+    })
+  } catch (error) {
+    ws.close(1011, error instanceof Error ? error.message : String(error))
+  }
 }

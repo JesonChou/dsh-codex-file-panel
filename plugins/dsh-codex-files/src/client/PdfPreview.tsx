@@ -10,9 +10,9 @@
 // Side effect: must run before any getDocument call (static import order
 // guarantees it); keeps the single-file bundle self-contained, with no
 // worker file, network fetch, or CSP-dependent Worker construction.
-import 'pdfjs-dist/build/pdf.worker.min.mjs'
+import 'pdfjs-dist/legacy/build/pdf.worker.min.mjs'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import * as pdfjsLib from 'pdfjs-dist'
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { rawUrl } from './preview-logic.ts'
 
@@ -21,6 +21,12 @@ const MAX_PAGES = 60
 
 /** Debounce for container resize → page re-render (ms). */
 const PDF_RESIZE_DEBOUNCE_MS = 140
+
+/** Host route serving pdf.js' binary CMap and standard-font assets. */
+const PDF_ASSET_BASE = '/plugins/dsh-codex-files/pdf-assets'
+
+/** Cap the rendered bitmap scale. Above this the files are mostly memory, not visible detail. */
+const MAX_PDF_PIXEL_RATIO = 2.5
 
 /** One rendered page: its bitmap data URL and original dimensions. */
 interface RenderedPage {
@@ -42,21 +48,35 @@ export interface PdfPreviewProps {
  * @param targetWidth - CSS pixel width to render at (devicePixelRatio-scaled).
  * @returns the page bitmap and dimensions.
  */
-async function renderPage(page: import('pdfjs-dist').PDFPageProxy, targetWidth: number): Promise<RenderedPage> {
+async function renderPage(
+  page: import('pdfjs-dist/legacy/build/pdf.mjs').PDFPageProxy,
+  targetWidth: number,
+  pixelRatio: number,
+): Promise<RenderedPage> {
   const base = page.getViewport({ scale: 1 })
-  const scale = targetWidth / base.width
-  const viewport = page.getViewport({ scale })
+  const cssScale = targetWidth / base.width
+  // Render at device-pixel scale so text and line art stay sharp on HiDPI
+  // screens; the returned width/height stay CSS pixels so the <img> keeps
+  // the same layout footprint as the previous 1x renderer.
+  const cssViewport = page.getViewport({ scale: cssScale })
+  const viewport = page.getViewport({ scale: cssScale * pixelRatio })
   const canvas = document.createElement('canvas')
-  canvas.width = Math.floor(viewport.width)
-  canvas.height = Math.floor(viewport.height)
+  canvas.width = Math.max(1, Math.ceil(viewport.width))
+  canvas.height = Math.max(1, Math.ceil(viewport.height))
   const context = canvas.getContext('2d')
   if (context === null) throw new Error('canvas 2d context unavailable')
   await page.render({ canvasContext: context, viewport }).promise
   return {
     url: canvas.toDataURL('image/png'),
-    width: viewport.width,
-    height: viewport.height,
+    width: cssViewport.width,
+    height: cssViewport.height,
   }
+}
+
+/** Clamp a raw device-pixel ratio into the PDF renderer's sane range. */
+export function pdfPixelRatio(raw: number | undefined): number {
+  const value = raw === undefined || !Number.isFinite(raw) ? 1 : raw
+  return Math.min(MAX_PDF_PIXEL_RATIO, Math.max(1, value))
 }
 
 /**
@@ -116,16 +136,27 @@ export function PdfPreview({ sessionId, path, t }: PdfPreviewProps): JSX.Element
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
         const bytes = new Uint8Array(await response.arrayBuffer())
         if (controller.signal.aborted) return
-        documentTask = pdfjsLib.getDocument({ data: bytes, isEvalSupported: false })
+        documentTask = pdfjsLib.getDocument({
+          data: bytes,
+          isEvalSupported: false,
+          // The browser build has no filesystem to resolve pdf.js' CMap and
+          // standard-font data from. Serve them from the plugin's own host
+          // route so CJK/standard-font PDFs render text instead of tofu or
+          // garbled glyphs.
+          cMapUrl: `${PDF_ASSET_BASE}/cmaps/`,
+          cMapPacked: true,
+          standardFontDataUrl: `${PDF_ASSET_BASE}/fonts/`,
+        })
         const document = await documentTask.promise
         if (controller.signal.aborted) return
         const total = document.numPages
         const limit = Math.min(total, MAX_PAGES)
         const pages: RenderedPage[] = []
+        const pixelRatio = pdfPixelRatio(window.devicePixelRatio)
         for (let number = 1; number <= limit; number++) {
           if (controller.signal.aborted) return
           const page = await document.getPage(number)
-          pages.push(await renderPage(page, targetWidth))
+          pages.push(await renderPage(page, targetWidth, pixelRatio))
         }
         await document.destroy()
         if (controller.signal.aborted) return
