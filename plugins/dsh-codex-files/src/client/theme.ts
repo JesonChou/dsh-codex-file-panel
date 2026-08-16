@@ -1314,15 +1314,15 @@ body[data-ds-dark-theme] .cfx-review-badge-unstaged {
   position: relative;
   padding: 8px;
   background: var(--dsw-alias-bg-layer-1);
-  border-radius: 12px;
+  border-radius: 0;
 }
 
 .cfx-terminal {
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 10px;
+  border: none;
+  border-radius: 0;
   background: var(--dsw-alias-bg-layer-1);
   box-shadow: none;
 }
