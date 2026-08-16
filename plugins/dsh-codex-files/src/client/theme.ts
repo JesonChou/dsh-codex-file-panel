@@ -181,7 +181,7 @@ body:not([data-ds-dark-theme]) {
 }
 
 [data-codex-files-layout-expanded] {
-  grid-template-columns: 0px 0px minmax(0, 1fr) !important;
+  grid-template-columns: var(--cfx-expanded-sidebar-width, 56px) 0px minmax(0, 1fr) !important;
 }
 
 [data-codex-files-layout-expanded] [data-side='sidebar'],
@@ -1333,20 +1333,26 @@ body[data-ds-dark-theme] .cfx-review-badge-unstaged {
 
 /* Bottom panel */
 .cfx-bottom-panel {
-  position: fixed;
-  left: 8px;
-  right: 8px;
-  bottom: 8px;
+  position: absolute;
+  left: var(--cfx-layout-sidebar-width, 0px);
+  right: 0;
+  bottom: 0;
   z-index: 90;
-  height: 42vh;
-  min-height: 180px;
+  height: var(--cfx-bottom-panel-height, 42vh);
+  min-height: 220px;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 14px;
+  border-top: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 14px 14px 0 0;
   overflow: hidden;
   background: var(--dsw-alias-bg-layer-1);
   box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.22), 0 12px 36px rgba(0, 0, 0, 0.2);
+}
+
+[data-codex-files-bottom-panel-open] > div:nth-child(2),
+[data-codex-files-bottom-panel-open] > div:nth-child(3) {
+  padding-bottom: var(--cfx-bottom-panel-height, 42vh);
+  box-sizing: border-box;
 }
 
 .cfx-bottom-panel-header {

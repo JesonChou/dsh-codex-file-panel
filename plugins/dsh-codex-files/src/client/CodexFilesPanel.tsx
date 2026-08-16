@@ -119,9 +119,18 @@ export function CodexFilesPanel({
   useLayoutEffect(() => {
     const frame = findLayoutFrame(rootRef.current)
     if (frame === null) return
-    if (panelExpanded) frame.setAttribute('data-codex-files-layout-expanded', 'true')
-    else frame.removeAttribute('data-codex-files-layout-expanded')
-    return () => { frame.removeAttribute('data-codex-files-layout-expanded') }
+    if (panelExpanded) {
+      const sidebar = frame.firstElementChild as HTMLElement | null
+      frame.setAttribute('data-codex-files-layout-expanded', 'true')
+      frame.style.setProperty('--cfx-expanded-sidebar-width', `${sidebar?.getBoundingClientRect().width ?? 0}px`)
+    } else {
+      frame.removeAttribute('data-codex-files-layout-expanded')
+      frame.style.removeProperty('--cfx-expanded-sidebar-width')
+    }
+    return () => {
+      frame.removeAttribute('data-codex-files-layout-expanded')
+      frame.style.removeProperty('--cfx-expanded-sidebar-width')
+    }
   }, [panelExpanded])
 
   // A session switch resets the panel's whole local state (details is a

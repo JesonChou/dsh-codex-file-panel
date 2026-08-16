@@ -8,6 +8,7 @@ import {
   IconPanelLeftOutline16,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import { useLayoutEffect, useRef } from 'react'
 import { TerminalView } from './TerminalView.tsx'
 import { toggleBottomPanel, useWorkbenchUi } from './workbench-store.ts'
 
@@ -17,9 +18,33 @@ export type BottomPanelProps =
 export function BottomPanel({ useSessions, t }: BottomPanelProps) {
   const sessionId = useSessions(state => state.current)
   const { bottomPanelOpen } = useWorkbenchUi()
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    const frame = rootRef.current?.closest('[data-shell-overlay]')?.parentElement ?? null
+    if (frame === null || !bottomPanelOpen) return
+    frame.setAttribute('data-codex-files-bottom-panel-open', 'true')
+    frame.style.setProperty('--cfx-bottom-panel-height', '42vh')
+    const updateSidebarWidth = (): void => {
+      const sidebar = frame.firstElementChild as HTMLElement | null
+      frame.style.setProperty('--cfx-layout-sidebar-width', `${sidebar?.getBoundingClientRect().width ?? 0}px`)
+    }
+    updateSidebarWidth()
+    const observer = new ResizeObserver(updateSidebarWidth)
+    if (frame.firstElementChild instanceof Element) observer.observe(frame.firstElementChild)
+    window.addEventListener('resize', updateSidebarWidth)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', updateSidebarWidth)
+      frame.removeAttribute('data-codex-files-bottom-panel-open')
+      frame.style.removeProperty('--cfx-bottom-panel-height')
+      frame.style.removeProperty('--cfx-layout-sidebar-width')
+    }
+  }, [bottomPanelOpen])
+
   if (!bottomPanelOpen || sessionId === undefined) return null
   return (
-    <div className="cfx-bottom-panel" data-codex-files-bottom-panel>
+    <div ref={rootRef} className="cfx-bottom-panel" data-codex-files-bottom-panel>
       <div className="cfx-bottom-panel-header">
         <IconPanelLeftOutline16 className="cfx-panel-right-icon" size={14} aria-hidden />
         <span className="cfx-bottom-panel-title">{t('terminal.title')}</span>
