@@ -8,6 +8,7 @@
     "build": "pnpm -r --if-present build",
     "test": "pnpm -r --if-present test",
     "typecheck": "pnpm -r --if-present typecheck",
+    "bootstrap:dsh": "node scripts/bootstrap-dsh.mjs",
     "check": "pnpm -r check"
   }
 }

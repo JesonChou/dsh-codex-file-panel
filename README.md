@@ -35,9 +35,16 @@ pnpm run check
 
 ## 本地 dsh 类型镜像
 
-`dsh-codex-files` 需要 `@deepseek-ai/*` 类型来通过 typecheck/build，而这些包并没有全部发布到公共 registry。它的 `dsh-dev/` 是本机 dsh checkout（相邻的 `D:\deepseek-harness`）的本地镜像，已加入 `.gitignore`，不进入 git。
+`dsh-codex-files` 需要 `@deepseek-ai/*` 类型来通过 typecheck/build，而这些包并没有全部发布到公共 registry。它的 `dsh-dev/` 是本机 dsh checkout（默认是相邻的 `D:\deepseek-harness`）的本地镜像，已加入 `.gitignore`，不进入 git。
 
-因此在这台机器上开发时保留该镜像即可；换一台机器 clone 后，需要重新从 dsh checkout 生成一份 `dsh-dev/` 再 `pnpm install`。生成方式与 `dsh-codex-files` 原仓库一致：把需要的 `@deepseek-ai/*` 包链接或复制到 `plugins/dsh-codex-files/dsh-dev/ai/`，并在 `tsconfig.json` 的 `paths` 与 `package.json` 的 `devDependencies` 里保持相对路径。
+在这台机器上开发时保留该镜像即可。换一台机器 clone 后，先构建 dsh checkout，再重新生成镜像：
+
+```powershell
+node scripts/bootstrap-dsh.mjs --dsh D:\deepseek-harness
+pnpm install
+```
+
+`bootstrap-dsh.mjs` 会扫描 dsh 的 `vendor/*`、`packages/*/*` 和 `native/landlock-run/packages/*`，把每个 `@deepseek-ai/*` 包的 `lib` 与重写后的 `package.json` 复制到 `plugins/dsh-codex-files/dsh-dev/ai/`；加 `--dry-run` 只列出计划，不写文件。
 
 ## 新增一个插件
 
