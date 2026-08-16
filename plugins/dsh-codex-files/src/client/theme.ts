@@ -177,14 +177,16 @@ body:not([data-ds-dark-theme]) {
 }
 
 .cfx-panel-expanded {
-  position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: min(960px, 100vw);
-  z-index: 70;
-  box-shadow: -18px 0 48px rgba(0, 0, 0, 0.28);
-  border-left: 1px solid var(--dsw-alias-border-l2);
+  height: 100%;
+}
+
+[data-codex-files-layout-expanded] {
+  grid-template-columns: 0px 0px minmax(0, 1fr) !important;
+}
+
+[data-codex-files-layout-expanded] [data-side='sidebar'],
+[data-codex-files-layout-expanded] [data-side='details'] {
+  display: none;
 }
 
 .cfx-header {
@@ -1306,7 +1308,7 @@ body[data-ds-dark-theme] .cfx-review-badge-unstaged {
   overflow: hidden;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 12px;
-  background: #0d0d0d;
+  background: var(--dsw-alias-bg-base);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
 }
 
@@ -1412,7 +1414,7 @@ body[data-ds-dark-theme] .cfx-review-badge-unstaged {
 }
 
 .xterm .xterm-viewport {
-  background-color: #0d0d0d;
+  background-color: transparent;
   overflow-y: scroll;
   cursor: default;
   position: absolute;

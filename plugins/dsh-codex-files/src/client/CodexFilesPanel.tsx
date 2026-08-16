@@ -6,7 +6,7 @@
  * conversation snapshot plus its own local tab/edit state; nothing here
  * mutates the session.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   IconBrowseOutline16, IconCheckOutline16, IconChevronLeftOutline14,
   IconCloseOutline16, IconCodeOutline16, IconCopyOutline16, IconEditOutline16,
@@ -44,6 +44,16 @@ export type CodexFilesPanelProps =
 
 /** The four top-level workbench surfaces in the right column. */
 type WorkbenchView = 'files' | 'review' | 'browser' | 'terminal'
+
+/** Find the DSH three-column frame that owns this panel's details slot. */
+function findLayoutFrame(node: HTMLElement | null): HTMLElement | null {
+  let current = node?.parentElement ?? null
+  while (current !== null) {
+    if (current.querySelector(':scope > [data-shell-overlay]') !== null) return current
+    current = current.parentElement
+  }
+  return null
+}
 
 /** Localized text for one route failure code. */
 function failureText(t: PropsLocale<'codex-files'>['t'], failure: FileRouteFailure): string {
@@ -95,11 +105,24 @@ export function CodexFilesPanel({
   const [repo, setRepo] = useState<string | null>(null)
   const [statusMap, setStatusMap] = useState<Record<string, string>>({})
   const { bottomPanelOpen } = useWorkbenchUi()
+  const rootRef = useRef<HTMLDivElement>(null)
   const activeTab = tabs.find(tab => tab.path === activePath)
   const activeFile = useMemo(
     () => files.find(file => file.path === activePath),
     [activePath, files],
   )
+
+  // Expanding the right panel is a layout-level action, not a fixed overlay:
+  // mark the DSH frame so its grid tracks collapse sidebar/center and give the
+  // details column the full frame width. Restoring removes the marker and
+  // lets the normal three-column concession solve return.
+  useLayoutEffect(() => {
+    const frame = findLayoutFrame(rootRef.current)
+    if (frame === null) return
+    if (panelExpanded) frame.setAttribute('data-codex-files-layout-expanded', 'true')
+    else frame.removeAttribute('data-codex-files-layout-expanded')
+    return () => { frame.removeAttribute('data-codex-files-layout-expanded') }
+  }, [panelExpanded])
 
   // A session switch resets the panel's whole local state (details is a
   // session-scope seat; the component instance survives the switch).
@@ -235,7 +258,11 @@ export function CodexFilesPanel({
   const dirtyCount = tabs.filter(tab => tab.editing).length
 
   return (
-    <div className={`cfx-panel${panelExpanded ? ' cfx-panel-expanded' : ''}`} data-codex-files-panel>
+    <div
+      ref={rootRef}
+      className={`cfx-panel${panelExpanded ? ' cfx-panel-expanded' : ''}`}
+      data-codex-files-panel
+    >
       <div className="cfx-header">
         <IconBrowseOutline16 size={14} aria-hidden />
         <span className="cfx-title">{t(workbenchView === 'files' ? 'panel.title' : workbenchView === 'review' ? 'review.title' : workbenchView === 'browser' ? 'browser.title' : 'terminal.title')}</span>

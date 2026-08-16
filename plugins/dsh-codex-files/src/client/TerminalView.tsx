@@ -14,13 +14,7 @@ import { terminalUrl } from './api.ts'
 const RETRY_DELAY_MS = 2_000
 const FAILURE_LIMIT = 3
 
-/** Codex-dark terminal palette; the surface reads app tokens in theme.ts. */
-const TERMINAL_THEME: ITheme = {
-  background: '#0d0d0d',
-  foreground: '#e8e8e8',
-  cursor: '#e8e8e8',
-  cursorAccent: '#0d0d0d',
-  selectionBackground: 'rgba(255,255,255,0.22)',
+const ANSI_DARK = {
   black: '#282c34',
   red: '#e06c75',
   green: '#98c379',
@@ -37,6 +31,26 @@ const TERMINAL_THEME: ITheme = {
   brightMagenta: '#c678dd',
   brightCyan: '#56b6c2',
   brightWhite: '#ffffff',
+}
+
+/** Read a live DSH design token, falling back when it is transparent/unset. */
+function tokenColor(name: string, fallback: string): string {
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return value === '' || value === 'transparent' ? fallback : value
+}
+
+/** xterm theme aligned to the active DSH theme tokens. */
+function terminalTheme(): ITheme {
+  const background = tokenColor('--dsw-alias-bg-base', '#0d0d0d')
+  const foreground = tokenColor('--dsw-alias-label-primary', '#e8e8e8')
+  return {
+    background,
+    foreground,
+    cursor: foreground,
+    cursorAccent: background,
+  selectionBackground: 'rgba(255,255,255,0.22)',
+    ...ANSI_DARK,
+  }
 }
 
 export function TerminalView(props: {
@@ -60,7 +74,7 @@ export function TerminalView(props: {
       scrollback: 4000,
       fontSize: 13,
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-      theme: TERMINAL_THEME,
+      theme: terminalTheme(),
     })
     const fit = new FitAddon()
     term.loadAddon(fit)
@@ -121,6 +135,11 @@ export function TerminalView(props: {
       }
     })
     observer.observe(host)
+    const themeObserver = new MutationObserver(() => {
+      term.options.theme = terminalTheme()
+      term.refresh(0, term.rows - 1)
+    })
+    themeObserver.observe(document.body, { attributes: true, attributeFilter: ['data-ds-dark-theme'] })
     try {
       fit.fit()
     } catch {
@@ -132,6 +151,7 @@ export function TerminalView(props: {
       closed = true
       window.clearTimeout(retry)
       observer.disconnect()
+      themeObserver.disconnect()
       inputSub.dispose()
       if (socket !== null && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: 'close' }))

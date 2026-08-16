@@ -38,6 +38,33 @@ export function extensionOf(path: string): string {
 /** Which previewer a path selects. */
 export type PreviewKind = 'pdf' | 'raw' | 'markdown' | 'html' | 'office' | 'epub' | 'csv' | 'text'
 
+/** One registered file previewer, in better-sidebar's descriptor shape. */
+export interface FileViewerDescriptor {
+  id: string
+  /** Lowercase extensions without the leading dot. */
+  exts: readonly string[]
+  /** Higher wins; the catch-all text viewer uses the lowest priority. */
+  priority?: number
+  kind: PreviewKind
+}
+
+/** The previewer registry. Add rows here instead of growing a switch chain. */
+export const FILE_VIEWERS: readonly FileViewerDescriptor[] = [
+  { id: 'pdf', exts: ['pdf'], priority: 100, kind: 'pdf' },
+  {
+    id: 'image-media',
+    exts: ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico', 'avif', 'mp4', 'webm', 'mov', 'm4v', 'mp3', 'wav', 'ogg', 'm4a', 'flac'],
+    priority: 80,
+    kind: 'raw',
+  },
+  { id: 'markdown', exts: ['md', 'markdown', 'mdx'], priority: 70, kind: 'markdown' },
+  { id: 'html', exts: ['html', 'htm'], priority: 70, kind: 'html' },
+  { id: 'office', exts: ['docx', 'xlsx', 'pptx'], priority: 60, kind: 'office' },
+  { id: 'epub', exts: ['epub'], priority: 60, kind: 'epub' },
+  { id: 'csv', exts: ['csv', 'tsv'], priority: 60, kind: 'csv' },
+  { id: 'text', exts: [], priority: -100, kind: 'text' },
+]
+
 /**
  * Kinds whose content the panel opens without the text read route: the
  * previewer fetches the bytes through /raw itself (PDFs, media, Office,
@@ -53,13 +80,11 @@ export function isBinaryPreviewKind(kind: PreviewKind): boolean {
 /** Route one path to its previewer kind. */
 export function previewKindFor(path: string): PreviewKind {
   const ext = extensionOf(path)
-  if (PDF_EXTENSIONS.has(ext)) return 'pdf'
-  if (RAW_EXTENSIONS.has(ext)) return 'raw'
-  if (MARKDOWN_EXTENSIONS.has(ext)) return 'markdown'
-  if (HTML_EXTENSIONS.has(ext)) return 'html'
-  if (OFFICE_EXTENSIONS.has(ext)) return 'office'
-  if (EPUB_EXTENSIONS.has(ext)) return 'epub'
-  if (CSV_EXTENSIONS.has(ext)) return 'csv'
+  const viewers = [...FILE_VIEWERS].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0))
+  for (const viewer of viewers) {
+    if (viewer.exts.length === 0) return viewer.kind
+    if (viewer.exts.includes(ext)) return viewer.kind
+  }
   return 'text'
 }
 
