@@ -94,6 +94,7 @@ export const zh = {
   'browser.blockedLoopback': '不允许访问本机地址',
   'terminal.title': '终端',
   'terminal.new': '新建终端',
+  'terminal.sessions': '终端会话',
   'terminal.connecting': '正在连接…',
   'terminal.retry': '重试',
 } as const
@@ -176,6 +177,7 @@ export const en: Record<keyof typeof zh, string> = {
   'browser.blockedLoopback': 'Local addresses are not allowed',
   'terminal.title': 'Terminal',
   'terminal.new': 'New terminal',
+  'terminal.sessions': 'Terminal sessions',
   'terminal.connecting': 'Connecting…',
   'terminal.retry': 'Retry',
 }

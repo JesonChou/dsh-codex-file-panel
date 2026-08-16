@@ -14,7 +14,6 @@ import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import { BottomPanel } from './BottomPanel.tsx'
 import { CodexFilesPanel, PanelToggle, type PanelInjected, type PanelToggleInjected } from './CodexFilesPanel.tsx'
 import { NS, en, zh } from './locales.ts'
-import { isDetailsCollapsed } from './panel-toggle.ts'
 import { CODEX_THEME_CSS } from './theme.ts'
 
 export const name = 'dsh-codex-files'
@@ -67,20 +66,17 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
   }, BottomPanel))
 
-  // The session header action that toggles the panel, exactly like the
-  // left sidebar's own toggle: the click decides open vs close from the
-  // frame's live collapsed fact (data-details-collapsed), so the button can
-  // never drift out of sync with the column's real geometry.
-  ctx.slots.inject('conversation.session.header.actions', () => ctx.slots.register({
-    name: 'conversation.session.header.actions',
-    id: 'codex-files-toggle',
-    order: 10,
+  // The collapsed-panel opener belongs in the right-aligned header utilities,
+  // immediately after Session log/export, so it sits next to the details
+  // column instead of floating beside the mode controls. It only renders while
+  // the details column is actually collapsed.
+  ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
+    name: 'conversation.session.header.utilities',
+    id: 'codex-files-panel-toggle',
+    order: 1000,
     locale: NS,
     inject: (): PanelToggleInjected => ({
-      togglePanel: () => {
-        if (isDetailsCollapsed()) ctx.layout.openDetails()
-        else ctx.layout.closeDetails()
-      },
+      togglePanel: () => { ctx.layout.openDetails() },
     }),
   }, PanelToggle))
 }

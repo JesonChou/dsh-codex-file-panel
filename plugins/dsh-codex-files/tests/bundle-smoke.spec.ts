@@ -69,6 +69,6 @@ describe('bundle smoke', () => {
     // Both slot registrations go through slots.inject; the details column
     // entry is the one that must exist for the panel to mount.
     expect(registered).toContain('details')
-    expect(registered).toContain('conversation.session.header.actions')
+    expect(registered).toContain('conversation.session.header.utilities')
   })
 })

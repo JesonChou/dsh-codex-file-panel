@@ -20,6 +20,7 @@ import { BrowserView } from './BrowserView.tsx'
 import { FileTree } from './FileTree.tsx'
 import { isBinaryPreviewKind, previewKindFor } from './preview-logic.ts'
 import { FilePreview } from './preview.tsx'
+import { isDetailsCollapsed } from './panel-toggle.ts'
 import { ReviewView } from './ReviewView.tsx'
 import { TerminalView } from './TerminalView.tsx'
 import { toggleBottomPanel, useWorkbenchUi } from './workbench-store.ts'
@@ -633,9 +634,24 @@ export interface PanelToggleInjected {
 
 /** Full toggle props: header-actions runtime share + injected toggle + locale. */
 export type PanelToggleProps =
-  PropsRuntime<'conversation.session.header.actions'> & PanelToggleInjected & PropsLocale<'codex-files'>
+  PropsRuntime<'conversation.session.header.utilities'> & PanelToggleInjected & PropsLocale<'codex-files'>
 
 export function PanelToggle({ togglePanel, t }: PanelToggleProps) {
+  const [collapsed, setCollapsed] = useState(() => isDetailsCollapsed())
+
+  useEffect(() => {
+    const update = (): void => { setCollapsed(isDetailsCollapsed()) }
+    update()
+    const observer = new MutationObserver(update)
+    observer.observe(document.body, {
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['data-details-collapsed'],
+    })
+    return () => { observer.disconnect() }
+  }, [])
+
+  if (!collapsed) return null
   return (
     <button
       type="button" className="cfx-header-toggle" title={t('panel.toggle')}

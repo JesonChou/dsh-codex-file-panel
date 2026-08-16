@@ -1382,67 +1382,162 @@ body[data-ds-dark-theme] .cfx-review-badge-unstaged {
 .cfx-bottom-panel-header {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 7px 10px;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 10px;
   border-bottom: 1px solid var(--dsw-alias-border-l1);
   flex: none;
 }
 
-.cfx-bottom-panel-title {
-  font-size: 12px;
-  font-weight: 600;
+.cfx-terminal-identity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.cfx-terminal-identity > svg {
+  flex: 0 0 auto;
   color: var(--dsw-alias-label-secondary);
 }
 
-.cfx-bottom-panel-tabs {
+.cfx-terminal-identity strong {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--dsw-alias-label-primary);
+}
+
+.cfx-terminal-identity > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-tertiary);
+  font: 11px ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.cfx-terminal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.cfx-terminal-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+
+.cfx-terminal-action:hover,
+.cfx-terminal-action:focus-visible {
+  border-color: var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  outline: none;
+}
+
+.cfx-terminal-session-rail {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 0 0 34px;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-layer-1);
+}
+
+.cfx-terminal-session-rail-list {
   display: flex;
   align-items: center;
   gap: 2px;
   min-width: 0;
+  flex: 1;
   overflow-x: auto;
+  overflow-y: hidden;
+  padding: 3px 6px;
   scrollbar-width: none;
 }
 
-.cfx-bottom-panel-tabs::-webkit-scrollbar {
+.cfx-terminal-session-rail-list::-webkit-scrollbar {
   display: none;
 }
 
-.cfx-bottom-panel-tab {
+.cfx-terminal-session {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  max-width: 160px;
-  height: 26px;
-  padding: 0 6px 0 9px;
+  gap: 2px;
+  min-width: 96px;
+  max-width: 180px;
+  flex: 0 1 180px;
+  height: 28px;
   border: 1px solid transparent;
   border-radius: 7px;
+  background: transparent;
   color: var(--dsw-alias-label-tertiary);
 }
 
-.cfx-bottom-panel-tab-active {
+.cfx-terminal-session-active {
   border-color: var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-base);
   color: var(--dsw-alias-label-primary);
 }
 
-.cfx-bottom-panel-tab > button:first-child {
+.cfx-terminal-session-select {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  flex: 1;
+  height: 26px;
+  padding: 0 6px 0 8px;
   border: none;
   background: transparent;
   color: inherit;
   font: inherit;
   font-size: 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  text-align: left;
   cursor: pointer;
 }
 
-.cfx-bottom-panel-tab-close {
+.cfx-terminal-session-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cfx-terminal-session-status {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-tertiary);
+  opacity: 0.6;
+}
+
+.cfx-terminal-session-status-active {
+  background: var(--dsw-static-deepseek-400);
+  opacity: 1;
+}
+
+.cfx-terminal-session-close {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
+  margin-right: 2px;
   padding: 0;
   border: none;
   border-radius: 5px;
@@ -1451,8 +1546,9 @@ body[data-ds-dark-theme] .cfx-review-badge-unstaged {
   cursor: pointer;
 }
 
-.cfx-bottom-panel-tab-close:hover {
+.cfx-terminal-session-close:hover {
   background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
 }
 
 .cfx-bottom-panel-body {
