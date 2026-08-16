@@ -90,6 +90,7 @@ export function CodexFilesPanel({
   const [viewMode, setViewMode] = useState<'content' | 'diff'>('content')
   const [viewTab, setViewTab] = useState<'workspace' | 'activity'>('workspace')
   const [workbenchView, setWorkbenchView] = useState<WorkbenchView>('files')
+  const [panelExpanded, setPanelExpanded] = useState(false)
   const [branch, setBranch] = useState<string | null>(null)
   const [repo, setRepo] = useState<string | null>(null)
   const [statusMap, setStatusMap] = useState<Record<string, string>>({})
@@ -112,6 +113,7 @@ export function CodexFilesPanel({
     setViewMode('content')
     setViewTab('workspace')
     setWorkbenchView('files')
+    setPanelExpanded(false)
     setBranch(null)
     setRepo(null)
     setStatusMap({})
@@ -233,7 +235,7 @@ export function CodexFilesPanel({
   const dirtyCount = tabs.filter(tab => tab.editing).length
 
   return (
-    <div className="cfx-panel" data-codex-files-panel>
+    <div className={`cfx-panel${panelExpanded ? ' cfx-panel-expanded' : ''}`} data-codex-files-panel>
       <div className="cfx-header">
         <IconBrowseOutline16 size={14} aria-hidden />
         <span className="cfx-title">{t(workbenchView === 'files' ? 'panel.title' : workbenchView === 'review' ? 'review.title' : workbenchView === 'browser' ? 'browser.title' : 'terminal.title')}</span>
@@ -267,9 +269,11 @@ export function CodexFilesPanel({
           <BottomPanelGlyph />
         </button>
         <button
-          type="button" className="cfx-icon-button" title={t('panel.expand')}
-          aria-label={t('panel.expand')}
-          onClick={closeDetails}
+          type="button" className={`cfx-icon-button${panelExpanded ? ' cfx-icon-button-active' : ''}`}
+          title={t(panelExpanded ? 'panel.collapse' : 'panel.expand')}
+          aria-label={t(panelExpanded ? 'panel.collapse' : 'panel.expand')}
+          aria-pressed={panelExpanded}
+          onClick={() => { setPanelExpanded(value => !value) }}
         >
           <IconFullscreenOutline16 size={14} aria-hidden />
         </button>

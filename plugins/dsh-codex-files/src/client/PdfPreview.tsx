@@ -25,6 +25,9 @@ const PDF_RESIZE_DEBOUNCE_MS = 140
 /** Host route serving pdf.js' binary CMap and standard-font assets. */
 const PDF_ASSET_BASE = '/plugins/dsh-codex-files/pdf-assets'
 
+/** Minimum rendered bitmap scale; keeps PDF text crisp even on 1x displays. */
+const MIN_PDF_PIXEL_RATIO = 2
+
 /** Cap the rendered bitmap scale. Above this the files are mostly memory, not visible detail. */
 const MAX_PDF_PIXEL_RATIO = 2.5
 
@@ -76,7 +79,7 @@ async function renderPage(
 /** Clamp a raw device-pixel ratio into the PDF renderer's sane range. */
 export function pdfPixelRatio(raw: number | undefined): number {
   const value = raw === undefined || !Number.isFinite(raw) ? 1 : raw
-  return Math.min(MAX_PDF_PIXEL_RATIO, Math.max(1, value))
+  return Math.min(MAX_PDF_PIXEL_RATIO, Math.max(MIN_PDF_PIXEL_RATIO, value))
 }
 
 /**
@@ -145,7 +148,7 @@ export function PdfPreview({ sessionId, path, t }: PdfPreviewProps): JSX.Element
           // garbled glyphs.
           cMapUrl: `${PDF_ASSET_BASE}/cmaps/`,
           cMapPacked: true,
-          standardFontDataUrl: `${PDF_ASSET_BASE}/fonts/`,
+          standardFontDataUrl: `${PDF_ASSET_BASE}/standard_fonts/`,
         })
         const document = await documentTask.promise
         if (controller.signal.aborted) return

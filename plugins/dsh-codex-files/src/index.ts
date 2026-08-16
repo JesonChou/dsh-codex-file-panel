@@ -262,7 +262,7 @@ export function apply(ctx: Context, config: Config): void {
         const relativeAsset = url.pathname.slice(pdfAssetBase.length).replace(/^[/]+/, '')
         const [kind, ...nameParts] = relativeAsset.split('/')
         const name = nameParts.join('/')
-        if ((kind !== 'cmaps' && kind !== 'fonts') || name === '' || name.includes('..')) {
+        if ((kind !== 'cmaps' && kind !== 'standard_fonts') || name === '' || name.includes('..')) {
           res.writeHead(404)
           res.end('not found')
           return
@@ -278,8 +278,9 @@ export function apply(ctx: Context, config: Config): void {
           res.end('pdf.js assets unavailable')
           return
         }
-        const absolute = resolve(root, kind, name)
-        const inside = relative(resolve(root, kind), absolute)
+        const assetDir = kind === 'cmaps' ? 'cmaps' : 'standard_fonts'
+        const absolute = resolve(root, assetDir, name)
+        const inside = relative(resolve(root, assetDir), absolute)
         if (inside === '' || inside === '..' || inside.startsWith(`..${sep}`) || isAbsolute(inside)) {
           res.writeHead(403)
           res.end('forbidden')

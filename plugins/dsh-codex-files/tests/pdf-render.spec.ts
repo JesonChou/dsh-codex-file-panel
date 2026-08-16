@@ -81,8 +81,8 @@ describe('clampPdfWidth', () => {
 
 describe('pdfPixelRatio', () => {
   it('clamps the device-pixel ratio into the sharp-but-bounded range', () => {
-    expect(pdfPixelRatio(undefined)).toBe(1)
-    expect(pdfPixelRatio(0.5)).toBe(1)
+    expect(pdfPixelRatio(undefined)).toBe(2)
+    expect(pdfPixelRatio(0.5)).toBe(2)
     expect(pdfPixelRatio(2)).toBe(2)
     expect(pdfPixelRatio(4)).toBe(2.5)
   })

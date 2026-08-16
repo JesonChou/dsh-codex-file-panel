@@ -176,6 +176,17 @@ body:not([data-ds-dark-theme]) {
   line-height: 1.5;
 }
 
+.cfx-panel-expanded {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(960px, 100vw);
+  z-index: 70;
+  box-shadow: -18px 0 48px rgba(0, 0, 0, 0.28);
+  border-left: 1px solid var(--dsw-alias-border-l2);
+}
+
 .cfx-header {
   display: flex;
   align-items: center;
@@ -212,7 +223,7 @@ body:not([data-ds-dark-theme]) {
   height: 24px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
   color: var(--dsw-alias-label-secondary);
   cursor: pointer;
@@ -1027,6 +1038,7 @@ body[data-ds-dark-theme] .cfx-html-preview {
   min-width: 52px;
   padding: 5px 8px;
   border: none;
+  border-radius: 8px 8px 0 0;
   border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
@@ -1175,7 +1187,7 @@ body[data-ds-dark-theme] .cfx-review-badge-unstaged {
   min-width: 0;
   height: 25px;
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 6px;
+  border-radius: 8px;
   background: transparent;
   color: var(--dsw-alias-label-primary);
   padding: 0 8px;
@@ -1239,7 +1251,7 @@ body[data-ds-dark-theme] .cfx-review-badge-unstaged {
   min-width: 0;
   height: 26px;
   border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 7px;
+  border-radius: 9px;
   background: var(--dsw-alias-bg-base);
   color: var(--dsw-alias-label-primary);
   padding: 0 9px;
@@ -1283,13 +1295,19 @@ body[data-ds-dark-theme] .cfx-review-badge-unstaged {
   display: flex;
   flex-direction: column;
   position: relative;
-  background: #0a0a0a;
+  padding: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  border-radius: 14px;
 }
 
 .cfx-terminal {
   flex: 1;
   min-height: 0;
-  padding: 8px 10px;
+  overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: #0d0d0d;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
 }
 
 .cfx-terminal-banner {
@@ -1314,17 +1332,19 @@ body[data-ds-dark-theme] .cfx-review-badge-unstaged {
 /* Bottom panel */
 .cfx-bottom-panel {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
   z-index: 90;
   height: 42vh;
   min-height: 180px;
   display: flex;
   flex-direction: column;
-  border-top: 1px solid var(--dsw-alias-border-l2);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 14px;
+  overflow: hidden;
   background: var(--dsw-alias-bg-layer-1);
-  box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.22);
+  box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.22), 0 12px 36px rgba(0, 0, 0, 0.2);
 }
 
 .cfx-bottom-panel-header {
@@ -1392,7 +1412,7 @@ body[data-ds-dark-theme] .cfx-review-badge-unstaged {
 }
 
 .xterm .xterm-viewport {
-  background-color: #0a0a0a;
+  background-color: #0d0d0d;
   overflow-y: scroll;
   cursor: default;
   position: absolute;

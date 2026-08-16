@@ -16,10 +16,10 @@ const FAILURE_LIMIT = 3
 
 /** Codex-dark terminal palette; the surface reads app tokens in theme.ts. */
 const TERMINAL_THEME: ITheme = {
-  background: '#0a0a0a',
+  background: '#0d0d0d',
   foreground: '#e8e8e8',
   cursor: '#e8e8e8',
-  cursorAccent: '#0a0a0a',
+  cursorAccent: '#0d0d0d',
   selectionBackground: 'rgba(255,255,255,0.22)',
   black: '#282c34',
   red: '#e06c75',
