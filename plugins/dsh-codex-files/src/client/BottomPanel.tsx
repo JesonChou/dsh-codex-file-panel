@@ -40,7 +40,8 @@ export function BottomPanel({ useSessions, t }: BottomPanelProps) {
   const [frame, setFrame] = useState<HTMLElement | null>(() => findLayoutFrame())
   const [heightPx, setHeightPx] = useState<number | null>(null)
   const nextTabNumber = useRef(1)
-  const resizeRef = useRef<{ startY: number; startHeight: number } | null>(null)
+  const resizeRef = useRef<{ startY: number; startHeight: number; lastHeight?: number } | null>(null)
+  const resizeFrameRef = useRef<number | null>(null)
 
   useEffect(() => {
     setTerminalTabs(['bottom-terminal-1'])
@@ -62,29 +63,50 @@ export function BottomPanel({ useSessions, t }: BottomPanelProps) {
 
   const beginResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     const panel = rootRef.current
-    if (panel === null) return
+    if (panel === null || frame === null) return
     event.currentTarget.setPointerCapture(event.pointerId)
+    const startHeight = panel.getBoundingClientRect().height
+    frame.setAttribute('data-codex-files-bottom-panel-resizing', 'true')
+    frame.style.setProperty('--cfx-bottom-panel-height', `${startHeight}px`)
     resizeRef.current = {
       startY: event.clientY,
-      startHeight: panel.getBoundingClientRect().height,
+      startHeight,
+      lastHeight: startHeight,
     }
-  }, [])
+  }, [frame])
 
   const resizeTerminal = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     const start = resizeRef.current
-    if (start === null || !event.currentTarget.hasPointerCapture(event.pointerId)) return
-    const frameHeight = frame?.getBoundingClientRect().height ?? window.innerHeight
+    if (start === null || frame === null || !event.currentTarget.hasPointerCapture(event.pointerId)) return
+    const frameHeight = frame.getBoundingClientRect().height
     const maxHeight = Math.max(MIN_TERMINAL_HEIGHT, Math.round(frameHeight * MAX_TERMINAL_HEIGHT_RATIO))
     const nextHeight = Math.min(maxHeight, Math.max(MIN_TERMINAL_HEIGHT, start.startHeight + start.startY - event.clientY))
-    setHeightPx(nextHeight)
+    start.lastHeight = nextHeight
+    if (resizeFrameRef.current !== null) cancelAnimationFrame(resizeFrameRef.current)
+    resizeFrameRef.current = requestAnimationFrame(() => {
+      frame.style.setProperty('--cfx-bottom-panel-height', `${nextHeight}px`)
+      resizeFrameRef.current = null
+    })
   }, [frame])
 
   const endResize = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (resizeFrameRef.current !== null) {
+      cancelAnimationFrame(resizeFrameRef.current)
+      resizeFrameRef.current = null
+    }
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
+    const finishedHeight = resizeRef.current?.lastHeight ?? resizeRef.current?.startHeight
+    if (finishedHeight !== undefined) setHeightPx(finishedHeight)
+    if (frame !== null) frame.removeAttribute('data-codex-files-bottom-panel-resizing')
     resizeRef.current = null
-  }, [])
+  }, [frame])
+
+  useEffect(() => () => {
+    if (resizeFrameRef.current !== null) cancelAnimationFrame(resizeFrameRef.current)
+    if (frame !== null) frame.removeAttribute('data-codex-files-bottom-panel-resizing')
+  }, [frame])
 
   useLayoutEffect(() => {
     if (frame === null) {

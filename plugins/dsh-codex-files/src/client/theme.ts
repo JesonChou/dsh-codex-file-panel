@@ -1400,6 +1400,10 @@ body[data-ds-dark-theme] .cfx-review-badge-unstaged {
     grid-template-columns var(--ds-transition-duration-slow) var(--ds-ease-in-out);
 }
 
+[data-codex-files-bottom-panel-open][data-codex-files-bottom-panel-resizing] {
+  transition: none;
+}
+
 [data-codex-files-bottom-panel-open] > div:first-child {
   grid-row: 1 / 3;
 }
