@@ -6,9 +6,10 @@
 import {
   IconCloseOutline16,
   IconPanelLeftOutline16,
+  IconPlusOutline16,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { useLayoutEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { TerminalView } from './TerminalView.tsx'
 import { toggleBottomPanel, useWorkbenchUi } from './workbench-store.ts'
 
@@ -19,6 +20,13 @@ export function BottomPanel({ useSessions, t }: BottomPanelProps) {
   const sessionId = useSessions(state => state.current)
   const { bottomPanelOpen } = useWorkbenchUi()
   const rootRef = useRef<HTMLDivElement>(null)
+  const [terminalTabs, setTerminalTabs] = useState<string[]>(['bottom-terminal-1'])
+  const [activeTab, setActiveTab] = useState('bottom-terminal-1')
+
+  useEffect(() => {
+    setTerminalTabs(['bottom-terminal-1'])
+    setActiveTab('bottom-terminal-1')
+  }, [sessionId])
 
   useLayoutEffect(() => {
     const frame = rootRef.current?.closest('[data-shell-overlay]')?.parentElement ?? null
@@ -43,11 +51,44 @@ export function BottomPanel({ useSessions, t }: BottomPanelProps) {
   }, [bottomPanelOpen])
 
   if (!bottomPanelOpen || sessionId === undefined) return null
+  const nextNumber = terminalTabs.length + 1
   return (
     <div ref={rootRef} className="cfx-bottom-panel" data-codex-files-bottom-panel>
       <div className="cfx-bottom-panel-header">
         <IconPanelLeftOutline16 className="cfx-panel-right-icon" size={14} aria-hidden />
-        <span className="cfx-bottom-panel-title">{t('terminal.title')}</span>
+        <div className="cfx-bottom-panel-tabs" role="tablist">
+          {terminalTabs.map((tab, index) => (
+            <div key={tab} className={`cfx-bottom-panel-tab${activeTab === tab ? ' cfx-bottom-panel-tab-active' : ''}`}>
+              <button type="button" role="tab" aria-selected={activeTab === tab} onClick={() => { setActiveTab(tab) }}>
+                {t('terminal.title')} {index + 1}
+              </button>
+              {terminalTabs.length > 1 && (
+                <button
+                  type="button" className="cfx-bottom-panel-tab-close"
+                  aria-label={t('file.close')} title={t('file.close')}
+                  onClick={() => {
+                    const next = terminalTabs.filter(item => item !== tab)
+                    setTerminalTabs(next)
+                    if (activeTab === tab) setActiveTab(next[0] ?? 'bottom-terminal-1')
+                  }}
+                >
+                  <IconCloseOutline16 size={11} />
+                </button>
+              )}
+            </div>
+          ))}
+          <button
+            type="button" className="cfx-icon-button"
+            aria-label={t('terminal.new')} title={t('terminal.new')}
+            onClick={() => {
+              const id = `bottom-terminal-${nextNumber}`
+              setTerminalTabs(tabs => [...tabs, id])
+              setActiveTab(id)
+            }}
+          >
+            <IconPlusOutline16 size={14} />
+          </button>
+        </div>
         <span className="cfx-spacer" />
         <button
           type="button" className="cfx-icon-button" aria-label={t('panel.close')} title={t('panel.close')}
@@ -56,7 +97,13 @@ export function BottomPanel({ useSessions, t }: BottomPanelProps) {
           <IconCloseOutline16 size={14} />
         </button>
       </div>
-      <TerminalView sessionId={sessionId} tabId="bottom-terminal" t={t} />
+      <div className="cfx-bottom-panel-body">
+        {terminalTabs.map(tab => (
+          <div key={tab} className={`cfx-bottom-panel-terminal${activeTab === tab ? '' : ' cfx-bottom-panel-terminal-hidden'}`}>
+            <TerminalView sessionId={sessionId} tabId={tab} t={t} />
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

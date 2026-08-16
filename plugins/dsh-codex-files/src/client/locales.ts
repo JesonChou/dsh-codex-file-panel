@@ -93,6 +93,7 @@ export const zh = {
   'browser.blockedScheme': '仅支持 http/https 地址',
   'browser.blockedLoopback': '不允许访问本机地址',
   'terminal.title': '终端',
+  'terminal.new': '新建终端',
   'terminal.connecting': '正在连接…',
   'terminal.retry': '重试',
 } as const
@@ -174,6 +175,7 @@ export const en: Record<keyof typeof zh, string> = {
   'browser.blockedScheme': 'Only http/https addresses are supported',
   'browser.blockedLoopback': 'Local addresses are not allowed',
   'terminal.title': 'Terminal',
+  'terminal.new': 'New terminal',
   'terminal.connecting': 'Connecting…',
   'terminal.retry': 'Retry',
 }
