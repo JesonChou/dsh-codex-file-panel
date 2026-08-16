@@ -35,7 +35,8 @@ const ANSI_DARK = {
 
 /** Read a live DSH design token, falling back when it is transparent/unset. */
 function tokenColor(name: string, fallback: string): string {
-  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  const root = document.body ?? document.documentElement
+  const value = getComputedStyle(root).getPropertyValue(name).trim()
   return value === '' || value === 'transparent' ? fallback : value
 }
 

@@ -1269,7 +1269,7 @@ body[data-ds-dark-theme] .cfx-review-badge-unstaged {
   height: 26px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 9px;
-  background: var(--dsw-alias-bg-base);
+  background: var(--dsw-alias-bg-base, #0d0d0d);
   color: var(--dsw-alias-label-primary);
   padding: 0 9px;
   font: inherit;
@@ -1363,6 +1363,10 @@ body[data-ds-dark-theme] .cfx-review-badge-unstaged {
 
 [data-codex-files-bottom-panel-open] {
   grid-template-rows: minmax(0, 1fr) var(--cfx-bottom-panel-height, 42vh) !important;
+}
+
+[data-codex-files-bottom-panel-open] > div:nth-child(1) {
+  grid-row: 1 / 3;
 }
 
 [data-codex-files-bottom-panel-open] [data-shell-overlay] {
