@@ -98,7 +98,7 @@ export function PdfPreview({ sessionId, path, t }: PdfPreviewProps): JSX.Element
   const [state, setState] = useState<
     | { status: 'loading' }
     | { status: 'error'; message: string }
-    | { status: 'ready'; pages: RenderedPage[]; truncated: boolean }
+    | { status: 'ready'; pages: RenderedPage[]; truncated: boolean; reloading?: boolean }
   >({ status: 'loading' })
   // Null means "not measured yet". The render effect waits for a real width
   // so a freshly mounted panel never rasterizes every page at a wrong
@@ -132,7 +132,7 @@ export function PdfPreview({ sessionId, path, t }: PdfPreviewProps): JSX.Element
     if (targetWidth === null) return
     const controller = new AbortController()
     let documentTask: pdfjsLib.PDFDocumentLoadingTask | null = null
-    setState({ status: 'loading' })
+    setState(prev => prev.status === 'ready' ? { ...prev, reloading: true } : { status: 'loading' })
     void (async () => {
       try {
         const response = await fetch(rawUrl(sessionId, path), { signal: controller.signal })
@@ -161,9 +161,16 @@ export function PdfPreview({ sessionId, path, t }: PdfPreviewProps): JSX.Element
           const page = await document.getPage(number)
           pages.push(await renderPage(page, targetWidth, pixelRatio))
         }
+        // Decode every bitmap before publishing the ready state so the first
+        // paint does not show blank <img> tiles that resolve one by one.
+        await Promise.all(pages.map(async (page) => {
+          const image = new Image()
+          image.src = page.url
+          if (typeof image.decode === 'function') await image.decode().catch(() => {})
+        }))
         await document.destroy()
         if (controller.signal.aborted) return
-        setState({ status: 'ready', pages, truncated: total > limit })
+        setState({ status: 'ready', pages, truncated: total > limit, reloading: false })
       } catch (error) {
         if (controller.signal.aborted) return
         setState({ status: 'error', message: error instanceof Error ? error.message : String(error) })
@@ -203,6 +210,7 @@ export function PdfPreview({ sessionId, path, t }: PdfPreviewProps): JSX.Element
           {state.truncated && (
             <div className="cfx-pdf-truncated">{t('file.pdfTruncated', { max: String(MAX_PAGES) })}</div>
           )}
+          {state.reloading === true && <div className="cfx-pdf-reloading">{t('file.loading')}</div>}
         </>
       )}
     </div>

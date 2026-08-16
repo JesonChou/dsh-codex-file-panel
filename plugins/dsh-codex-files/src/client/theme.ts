@@ -985,6 +985,21 @@ body[data-ds-dark-theme] .cfx-html-preview {
   color: var(--dsw-alias-label-tertiary);
 }
 
+.cfx-pdf-reloading {
+  position: sticky;
+  bottom: 10px;
+  width: max-content;
+  margin: 0 auto;
+  padding: 4px 9px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+}
+
 /* ── CSV table preview ─────────────────────────────────────────────────── */
 .cfx-csv-wrap {
   height: 100%;
