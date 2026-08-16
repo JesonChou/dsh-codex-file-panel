@@ -12,12 +12,13 @@ dsh-plugins/
 │   └── plugin-standard.md      # 从 dsh 文档提炼的打包/安装规则
 ├── plugins/
 │   ├── README.md               # 每个插件目录的结构与 manifest 约定
-│   └── hello-plugin/           # 最小可运行 TypeScript 模板
-│       ├── package.json        # 声明 dsh.bundle.patch
-│       ├── cordis.patch.yml    # 该 bundle 贡献的 patch 层
-│       ├── src/index.ts        # 插件入口：export const name + apply()
-│       ├── tests/hello.spec.js # node --test 冒烟测试
-│       └── tsconfig.json
+│   ├── hello-plugin/           # 最小可运行 TypeScript 模板
+│   │   ├── package.json        # 声明 dsh.bundle.patch
+│   │   ├── cordis.patch.yml    # 该 bundle 贡献的 patch 层
+│   │   ├── src/index.ts        # 插件入口：export const name + apply()
+│   │   ├── tests/hello.spec.js # node --test 冒烟测试
+│   │   └── tsconfig.json
+│   └── dsh-codex-files/        # Codex 桌面风格主题 + 右侧 Files 面板
 ├── package.json                # 私有 workspace 根，只有脚本
 ├── pnpm-workspace.yaml
 └── tsconfig.base.json          # 共享的严格 ESM TypeScript 配置
@@ -31,6 +32,12 @@ pnpm run check
 ```
 
 `pnpm run check` 会构建并测试 workspace 里的每个插件。
+
+## 本地 dsh 类型镜像
+
+`dsh-codex-files` 需要 `@deepseek-ai/*` 类型来通过 typecheck/build，而这些包并没有全部发布到公共 registry。它的 `dsh-dev/` 是本机 dsh checkout（相邻的 `D:\deepseek-harness`）的本地镜像，已加入 `.gitignore`，不进入 git。
+
+因此在这台机器上开发时保留该镜像即可；换一台机器 clone 后，需要重新从 dsh checkout 生成一份 `dsh-dev/` 再 `pnpm install`。生成方式与 `dsh-codex-files` 原仓库一致：把需要的 `@deepseek-ai/*` 包链接或复制到 `plugins/dsh-codex-files/dsh-dev/ai/`，并在 `tsconfig.json` 的 `paths` 与 `package.json` 的 `devDependencies` 里保持相对路径。
 
 ## 新增一个插件
 

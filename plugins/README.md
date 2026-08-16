@@ -2,6 +2,11 @@
 
 `plugins/<name>` 是 workspace 的成员，也是一个个独立 npm 包。每个插件都遵守 [docs/plugin-standard.md](../docs/plugin-standard.md)。
 
+当前成员：
+
+- `hello-plugin` — 零依赖的最小模板。
+- `dsh-codex-files` — 已迁移的完整插件；它的 `dsh-dev/` 是本地 dsh 类型镜像，不进入 git。
+
 ## 每个插件目录
 
 ```
