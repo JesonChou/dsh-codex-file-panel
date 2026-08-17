@@ -1,10 +1,9 @@
 /**
- * Codex-style embedded browser tab. The iframe is sandboxed without
- * allow-same-origin or allow-top-navigation so a visited page cannot touch
- * the GUI. The address bar only accepts http(s) and rejects loopback /
- * self-origin URLs.
+ * Codex-style embedded browser content. Browser tabs are owned by the
+ * workbench so that every page is a peer in the native tab strip; this
+ * component only renders the active page and its navigation controls.
  */
-import { useState } from 'react'
+import { useEffect, useRef } from 'react'
 import {
   IconChevronLeftOutline14,
   IconChevronRightOutline14,
@@ -14,12 +13,56 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 
-const IFRAME_SANDBOX = 'allow-scripts allow-forms allow-popups allow-downloads allow-modals allow-popups-to-escape-sandbox'
+const IFRAME_SANDBOX = [
+  'allow-scripts',
+  'allow-same-origin',
+  'allow-forms',
+  'allow-popups',
+  'allow-downloads',
+  'allow-modals',
+  'allow-popups-to-escape-sandbox',
+].join(' ')
+
+/** Browser features that sites commonly need for a complete embedded UI. */
+const IFRAME_ALLOW = 'autoplay; clipboard-read; clipboard-write; fullscreen; picture-in-picture'
+
+export interface BrowserTab {
+  id: number
+  url: string | null
+  history: string[]
+  cursor: number
+  reloadKey: number
+}
+
+export function closeNativeBrowserTab(tabId: number): void {
+  getWebViewBridge()?.postMessage({ type: 'dsh-browser-native-tab-close', tabId })
+}
+
+export function createBrowserTab(id: number, url: string | null = null): BrowserTab {
+  return {
+    id,
+    url,
+    history: url === null ? [] : [url],
+    cursor: url === null ? -1 : 0,
+    reloadKey: 0,
+  }
+}
 
 interface UrlResult {
   ok: boolean
   url?: string
   reason?: 'invalid' | 'scheme' | 'loopback'
+}
+
+interface WebViewBridge {
+  addEventListener(type: 'message', listener: (event: MessageEvent<unknown>) => void): void
+  removeEventListener(type: 'message', listener: (event: MessageEvent<unknown>) => void): void
+  postMessage(message: unknown): void
+}
+
+function getWebViewBridge(): WebViewBridge | null {
+  const hostWindow = window as Window & { chrome?: { webview?: WebViewBridge } }
+  return hostWindow.chrome?.webview ?? null
 }
 
 /** Normalize the address-bar input into an embeddable http(s) URL. */
@@ -40,98 +83,227 @@ export function normalizeBrowserUrl(raw: string, selfOrigin: string): UrlResult 
   return { ok: true, url: parsed.href }
 }
 
-export function BrowserView(props: { t: PropsLocale<'codex-files'>['t'] }) {
-  const { t } = props
-  const [input, setInput] = useState('')
-  const [url, setUrl] = useState<string | null>(null)
-  const [history, setHistory] = useState<string[]>([])
-  const [cursor, setCursor] = useState(-1)
-  const [reloadKey, setReloadKey] = useState(0)
-  const [message, setMessage] = useState<string | null>(null)
+export interface BrowserViewProps {
+  t: PropsLocale<'codex-files'>['t']
+  tabs: BrowserTab[]
+  activeTabId: number
+  onTabsChange: (tabs: BrowserTab[]) => void
+  onActiveTabChange: (id: number) => void
+  /** Keep the browser page mounted while another workbench view is active. */
+  visible?: boolean
+  /** Kept for focused component tests and standalone embedding. */
+  showTabs?: boolean
+}
 
-  const navigateTo = (raw: string): void => {
+export function BrowserView(props: BrowserViewProps) {
+  const { t, tabs, activeTabId, onTabsChange, onActiveTabChange, visible = true, showTabs = false } = props
+  const tabsRef = useRef(tabs)
+  const frameRef = useRef<HTMLIFrameElement>(null)
+  const nativeTabIdsRef = useRef(new Set(tabs.map(tab => tab.id)))
+  tabsRef.current = tabs
+  const activeTab = (tabs.find(tab => tab.id === activeTabId) ?? tabs[0])!
+
+  const openInternalTab = (raw: string): void => {
     const result = normalizeBrowserUrl(raw, window.location.origin)
-    if (!result.ok || result.url === undefined) {
-      setMessage(
-        result.reason === 'scheme'
-          ? t('browser.blockedScheme')
-          : result.reason === 'loopback'
-            ? t('browser.blockedLoopback')
-            : t('browser.invalid'),
-      )
-      return
+    if (!result.ok || result.url === undefined) return
+    const id = Math.max(0, ...tabsRef.current.map(tab => tab.id)) + 1
+    onTabsChange([...tabsRef.current, createBrowserTab(id, result.url)])
+    onActiveTabChange(id)
+  }
+
+  // WebView2 sends NewWindowRequested messages to the top-level page. This is
+  // what keeps iframe target="_blank" links inside the workbench tab strip.
+  useEffect(() => {
+    const onMessage = (event: MessageEvent<unknown>): void => {
+      const data = event.data
+      if (!data || typeof data !== 'object') return
+      const payload = data as { type?: unknown; url?: unknown; tabId?: unknown }
+      if ((payload.type === 'dsh-browser-new-window' || payload.type === 'dsh-browser-native-new-window') && typeof payload.url === 'string') {
+        openInternalTab(payload.url)
+        return
+      }
+      if (payload.type !== 'dsh-browser-native-navigate' || typeof payload.url !== 'string' || typeof payload.tabId !== 'number') return
+      if (!tabsRef.current.some(tab => tab.id === payload.tabId)) return
+      const result = normalizeBrowserUrl(payload.url, window.location.origin)
+      if (!result.ok || result.url === undefined) return
+      onTabsChange(tabsRef.current.map(tab => tab.id === payload.tabId ? {
+        ...tab,
+        url: result.url!,
+        history: tab.history[tab.cursor] === result.url ? tab.history : [...tab.history.slice(0, tab.cursor + 1), result.url!],
+        cursor: tab.history[tab.cursor] === result.url ? tab.cursor : tab.cursor + 1,
+        reloadKey: tab.reloadKey + 1,
+      } : tab))
     }
-    setMessage(null)
-    setUrl(result.url)
-    setInput(result.url)
-    setHistory(prev => [...prev.slice(0, cursor + 1), result.url!])
-    setCursor(prev => prev + 1)
-    setReloadKey(key => key + 1)
+    const bridge = getWebViewBridge()
+    window.addEventListener('message', onMessage)
+    bridge?.addEventListener('message', onMessage)
+    return () => {
+      window.removeEventListener('message', onMessage)
+      bridge?.removeEventListener('message', onMessage)
+    }
+  }, [])
+
+  // Removing a tab from the workbench must also remove the corresponding
+  // native WebView2 child. This is intentionally based on the tab-id diff so
+  // top-level tab close buttons and the focused browser view share one path.
+  useEffect(() => {
+    const currentIds = new Set(tabs.map(tab => tab.id))
+    for (const tabId of nativeTabIdsRef.current) {
+      if (!currentIds.has(tabId)) closeNativeBrowserTab(tabId)
+    }
+    nativeTabIdsRef.current = currentIds
+  }, [tabs])
+
+  // The browser panel can be unmounted while its last tab is still playing.
+  // Codex tears down the page in this case; do the same for every native tab.
+  useEffect(() => {
+    return () => {
+      for (const tab of tabsRef.current) closeNativeBrowserTab(tab.id)
+      getWebViewBridge()?.postMessage({ type: 'dsh-browser-native-tab-active', tabId: null })
+    }
+  }, [])
+
+  // In the desktop Harness, the iframe is only a geometry anchor. A native
+  // WebView2 child is positioned over it so pages that send
+  // frame-ancestors 'none' (including DeepSeek sign-in) still render.
+  useEffect(() => {
+    const bridge = getWebViewBridge()
+    if (bridge === null) return
+    const sendGeometry = (): void => {
+      const frame = frameRef.current
+      if (!visible || frame === null || activeTab.url === null) {
+        bridge.postMessage({ type: 'dsh-browser-native-tab-active', tabId: null })
+        return
+      }
+      const rect = frame.getBoundingClientRect()
+      bridge.postMessage({
+        type: 'dsh-browser-native-tab',
+        tabId: activeTab.id,
+        url: activeTab.url,
+        devicePixelRatio: window.devicePixelRatio || 1,
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+      })
+      bridge.postMessage({ type: 'dsh-browser-native-tab-active', tabId: activeTab.id })
+    }
+    sendGeometry()
+    const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(sendGeometry)
+    if (frameRef.current !== null) resize?.observe(frameRef.current)
+    window.addEventListener('resize', sendGeometry)
+    return () => {
+      resize?.disconnect()
+      window.removeEventListener('resize', sendGeometry)
+    }
+  }, [activeTab.id, activeTab.url, activeTab.reloadKey, visible])
+
+  const navigateTo = (raw: string, tabId = activeTab.id): void => {
+    const result = normalizeBrowserUrl(raw, window.location.origin)
+    if (!result.ok || result.url === undefined) return
+    onTabsChange(tabsRef.current.map(tab => tab.id === tabId ? {
+      ...tab,
+      url: result.url!,
+      history: [...tab.history.slice(0, tab.cursor + 1), result.url!],
+      cursor: tab.cursor + 1,
+      reloadKey: tab.reloadKey + 1,
+    } : tab))
   }
 
   const go = (nextCursor: number): void => {
-    const next = history[nextCursor]
+    const next = activeTab.history[nextCursor]
     if (next === undefined) return
-    setCursor(nextCursor)
-    setUrl(next)
-    setInput(next)
-    setReloadKey(key => key + 1)
+    onTabsChange(tabsRef.current.map(tab => tab.id === activeTab.id ? {
+      ...tab,
+      url: next,
+      cursor: nextCursor,
+      reloadKey: tab.reloadKey + 1,
+    } : tab))
+  }
+
+  const closeTab = (tabId: number): void => {
+    closeNativeBrowserTab(tabId)
+    if (tabsRef.current.length === 1) {
+      onTabsChange([createBrowserTab(tabId)])
+      return
+    }
+    const index = tabsRef.current.findIndex(tab => tab.id === tabId)
+    const remaining = tabsRef.current.filter(tab => tab.id !== tabId)
+    onTabsChange(remaining)
+    if (tabId === activeTab.id) onActiveTabChange(remaining[Math.max(0, index - 1)]!.id)
   }
 
   return (
     <div className="cfx-browser">
+      {showTabs && (
+        <div className="cfx-browser-tabs" role="tablist">
+          {tabs.map(tab => (
+            <div className={`cfx-browser-tab${tab.id === activeTab.id ? ' is-active' : ''}`} key={tab.id}>
+              <button type="button" role="tab" aria-selected={tab.id === activeTab.id} onClick={() => { onActiveTabChange(tab.id) }}>
+                {tab.url === null ? t('browser.title') : new URL(tab.url).hostname}
+              </button>
+              <button type="button" className="cfx-browser-tab-close" aria-label={t('browser.closeTab')} onClick={() => { closeTab(tab.id) }}>×</button>
+            </div>
+          ))}
+          <button type="button" className="cfx-browser-new-tab" aria-label={t('browser.newTab')} onClick={() => {
+            const id = Math.max(0, ...tabsRef.current.map(tab => tab.id)) + 1
+            onTabsChange([...tabsRef.current, createBrowserTab(id)])
+            onActiveTabChange(id)
+          }}>+</button>
+        </div>
+      )}
       <div className="cfx-browser-bar">
         <button
           type="button" className="cfx-icon-button" aria-label={t('browser.back')} title={t('browser.back')}
-          disabled={cursor <= 0} onClick={() => { go(cursor - 1) }}
+          disabled={activeTab.cursor <= 0} onClick={() => { go(activeTab.cursor - 1) }}
         >
           <IconChevronLeftOutline14 size={14} />
         </button>
         <button
           type="button" className="cfx-icon-button" aria-label={t('browser.forward')} title={t('browser.forward')}
-          disabled={cursor >= history.length - 1} onClick={() => { go(cursor + 1) }}
+          disabled={activeTab.cursor >= activeTab.history.length - 1} onClick={() => { go(activeTab.cursor + 1) }}
         >
           <IconChevronRightOutline14 size={14} />
         </button>
         <button
           type="button" className="cfx-icon-button" aria-label={t('browser.refresh')} title={t('browser.refresh')}
-          onClick={() => { setReloadKey(key => key + 1) }}
+          onClick={() => { onTabsChange(tabsRef.current.map(tab => tab.id === activeTab.id ? { ...tab, reloadKey: tab.reloadKey + 1 } : tab)) }}
         >
           <IconRefreshOutline14 size={14} />
         </button>
         <input
           className="cfx-browser-input"
-          value={input}
+          value={activeTab.url ?? ''}
           placeholder={t('browser.placeholder')}
           spellCheck={false}
-          onChange={(event) => { setInput(event.target.value) }}
+          onChange={(event) => {
+            const value = event.target.value
+            onTabsChange(tabsRef.current.map(tab => tab.id === activeTab.id ? { ...tab, url: value } : tab))
+          }}
           onKeyDown={(event) => {
-            if (event.key === 'Enter') navigateTo(input)
+            if (event.key === 'Enter') navigateTo(activeTab.url ?? '')
           }}
         />
-        <button type="button" className="cfx-icon-button" aria-label={t('browser.go')} title={t('browser.go')} onClick={() => { navigateTo(input) }}>
+        <button type="button" className="cfx-icon-button" aria-label={t('browser.go')} title={t('browser.go')} onClick={() => { navigateTo(activeTab.url ?? '') }}>
           <IconLinkOutline14 size={14} />
         </button>
         <button
           type="button" className="cfx-icon-button" aria-label={t('browser.openExternal')} title={t('browser.openExternal')}
-          disabled={url === null}
-          onClick={() => { if (url !== null) window.open(url, '_blank', 'noopener') }}
+          disabled={activeTab.url === null}
+          onClick={() => { if (activeTab.url !== null) openInternalTab(activeTab.url) }}
         >
           <IconRightUpOutline16 size={15} />
         </button>
       </div>
-      {message !== null && <div className="cfx-browser-message">{message}</div>}
-      {url === null ? (
+      {activeTab.url === null ? (
         <div className="cfx-browser-empty">{t('browser.start')}</div>
       ) : (
         <iframe
-          key={reloadKey}
+          key={`${activeTab.id}:${activeTab.reloadKey}`}
+          ref={frameRef}
           className="cfx-browser-frame"
-          src={url}
-          title={url}
+          src={activeTab.url}
+          title={activeTab.url}
           sandbox={IFRAME_SANDBOX}
           referrerPolicy="no-referrer"
-          allow=""
+          allow={IFRAME_ALLOW}
         />
       )}
     </div>

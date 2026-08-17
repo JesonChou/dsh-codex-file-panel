@@ -1753,6 +1753,68 @@ body[data-ds-dark-theme] .cfx-review-badge-unstaged {
   flex-direction: column;
 }
 
+.cfx-browser-tabs {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 30px;
+  padding: 3px 6px 0;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--dsw-alias-border-l1);
+  flex: none;
+}
+
+.cfx-browser-tab {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 180px;
+  border-radius: 7px 7px 0 0;
+  background: transparent;
+}
+
+.cfx-browser-tab.is-active {
+  background: var(--dsw-alias-bg-base, #0d0d0d);
+}
+
+.cfx-browser-tab > button:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  padding: 6px 7px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.cfx-browser-tab.is-active > button:first-child {
+  color: var(--dsw-alias-label-primary);
+}
+
+.cfx-browser-tab-close,
+.cfx-browser-new-tab {
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  font: inherit;
+  line-height: 1;
+}
+
+.cfx-browser-tab-close {
+  padding: 5px 7px 5px 1px;
+  font-size: 14px;
+}
+
+.cfx-browser-new-tab {
+  padding: 5px 8px;
+  font-size: 17px;
+}
+
 .cfx-browser-bar {
   display: flex;
   align-items: center;

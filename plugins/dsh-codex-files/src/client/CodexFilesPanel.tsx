@@ -20,7 +20,7 @@ import {
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { FileRouteFailure } from './api.ts'
 import { gitInfo, readFile, writeFile } from './api.ts'
-import { BrowserView } from './BrowserView.tsx'
+import { BrowserView, closeNativeBrowserTab, createBrowserTab, type BrowserTab } from './BrowserView.tsx'
 import { FileTree } from './FileTree.tsx'
 import { isBinaryPreviewKind, previewKindFor } from './preview-logic.ts'
 import { FilePreview } from './preview.tsx'
@@ -92,6 +92,30 @@ interface OpenTab {
 
 const EMPTY_TABS: OpenTab[] = []
 
+type BrowserToolId = `browser:${number}`
+type NativeTool = 'review' | BrowserToolId
+
+function browserToolId(id: number): BrowserToolId {
+  return `browser:${id}`
+}
+
+function browserTabId(tool: BrowserToolId): number {
+  return Number(tool.slice('browser:'.length))
+}
+
+function isBrowserTool(tool: NativeTool): tool is BrowserToolId {
+  return tool.startsWith('browser:')
+}
+
+function browserTabLabel(tab: BrowserTab | undefined, t: PropsLocale<'codex-files'>['t']): string {
+  if (tab?.url === null || tab === undefined) return t('browser.newTab')
+  try {
+    return new URL(tab.url).hostname
+  } catch {
+    return t('browser.title')
+  }
+}
+
 export function CodexFilesPanel({
   sessionId, useSession, useSessions, closeDetails, openPath, t,
 }: CodexFilesPanelProps) {
@@ -109,7 +133,9 @@ export function CodexFilesPanel({
     activeView: workbenchView, bottomPanelOpen, fileRequest,
     mainContentWidth, rightPanelWidth,
   } = useWorkbenchUi()
-  const [openTools, setOpenTools] = useState<Array<'review' | 'browser'>>([])
+  const [browserTabs, setBrowserTabs] = useState<BrowserTab[]>([createBrowserTab(1)])
+  const [activeBrowserTabId, setActiveBrowserTabId] = useState(1)
+  const [openTools, setOpenTools] = useState<NativeTool[]>([])
   const [panelExpanded, setPanelExpanded] = useState(false)
   const [branch, setBranch] = useState<string | null>(null)
   const [repo, setRepo] = useState<string | null>(null)
@@ -176,9 +202,13 @@ export function CodexFilesPanel({
   }, [sessionId])
 
   useEffect(() => {
-    if (workbenchView !== 'review' && workbenchView !== 'browser') return
-    setOpenTools(current => current.includes(workbenchView) ? current : [...current, workbenchView])
-  }, [workbenchView])
+    if (workbenchView === 'review') {
+      setOpenTools(current => current.includes('review') ? current : [...current, 'review'])
+    } else if (workbenchView === 'browser') {
+      const tool = browserToolId(activeBrowserTabId)
+      setOpenTools(current => current.includes(tool) ? current : [...current, tool])
+    }
+  }, [activeBrowserTabId, workbenchView])
 
   /** Load a file's disk content into (or refresh) a tab. */
   const loadInto = useCallback(async (path: string): Promise<void> => {
@@ -291,18 +321,63 @@ export function CodexFilesPanel({
     if (absolutePath !== null) openPath(absolutePath)
   }, [absolutePath, openPath])
 
-  const closeTool = useCallback((view: 'review' | 'browser') => {
-    const nextTools = openTools.filter(item => item !== view)
+  const syncBrowserTabs = useCallback((next: BrowserTab[]): void => {
+    setBrowserTabs(next)
+    setOpenTools(current => {
+      const valid = new Set(next.map(tab => browserToolId(tab.id)))
+      const retained = current.filter(tool => !isBrowserTool(tool) || valid.has(tool))
+      const existing = new Set(retained)
+      return [...retained, ...next.map(tab => browserToolId(tab.id)).filter(tool => !existing.has(tool))]
+    })
+  }, [])
+
+  const openBrowser = useCallback((): void => {
+    const tool = browserToolId(activeBrowserTabId)
+    setOpenTools(current => current.includes(tool) ? current : [...current, tool])
+    setWorkbenchView('browser')
+  }, [activeBrowserTabId])
+
+  const closeBrowserTab = useCallback((id: number): void => {
+    closeNativeBrowserTab(id)
+    const next = browserTabs.filter(tab => tab.id !== id)
+    if (next.length === 0) {
+      setBrowserTabs([createBrowserTab(1)])
+      setOpenTools(current => current.filter(tool => !isBrowserTool(tool)))
+      if (workbenchView === 'browser') setWorkbenchView('new-tab')
+      setActiveBrowserTabId(1)
+      return
+    }
+    syncBrowserTabs(next)
+    if (id === activeBrowserTabId) {
+      const index = browserTabs.findIndex(tab => tab.id === id)
+      setActiveBrowserTabId(next[Math.max(0, index - 1)]!.id)
+    }
+  }, [activeBrowserTabId, browserTabs, syncBrowserTabs, workbenchView])
+
+  const closeTool = useCallback((tool: NativeTool) => {
+    if (isBrowserTool(tool)) {
+      closeBrowserTab(browserTabId(tool))
+      return
+    }
+    const nextTools = openTools.filter(item => item !== tool)
     setOpenTools(nextTools)
-    if (workbenchView !== view) return
+    if (workbenchView !== tool) return
     const nextFile = tabs.at(-1)
     if (nextFile !== undefined) {
       setActivePath(nextFile.path)
       setWorkbenchView('files')
       return
     }
-    setWorkbenchView(nextTools.at(-1) ?? 'new-tab')
-  }, [openTools, tabs, workbenchView])
+    const fallback = nextTools.at(-1) as NativeTool | undefined
+    if (fallback === 'review') {
+      setWorkbenchView('review')
+    } else if (fallback !== undefined && isBrowserTool(fallback)) {
+      setActiveBrowserTabId(browserTabId(fallback))
+      setWorkbenchView('browser')
+    } else {
+      setWorkbenchView('new-tab')
+    }
+  }, [closeBrowserTab, openTools, tabs, workbenchView])
 
   const dirtyCount = tabs.filter(tab => tab.editing).length
 
@@ -395,25 +470,40 @@ export function CodexFilesPanel({
         />
       )}
       <div className="cfx-native-tabs" role="tablist">
-        {openTools.map(view => (
-          <button
-            key={view}
-            type="button" role="tab"
-            className={`cfx-native-tab${workbenchView === view ? ' cfx-native-tab-active' : ''}`}
-            aria-selected={workbenchView === view}
-            onClick={() => { setWorkbenchView(view) }}
-          >
-            <WorkbenchGlyph view={view} />
-            <span>{t(view === 'review' ? 'review.title' : 'browser.title')}</span>
-            <span
-              role="button" tabIndex={-1} className="cfx-tab-close"
-              aria-label={t('file.close')}
-              onClick={(event) => { event.stopPropagation(); closeTool(view) }}
+        {openTools.map(tool => {
+          const browser = isBrowserTool(tool)
+          const selected = browser
+            ? workbenchView === 'browser' && activeBrowserTabId === browserTabId(tool)
+            : workbenchView === tool
+          return (
+            <button
+              key={tool}
+              type="button" role="tab"
+              className={`cfx-native-tab${selected ? ' cfx-native-tab-active' : ''}`}
+              aria-selected={selected}
+              onClick={() => {
+                if (browser) {
+                  setActiveBrowserTabId(browserTabId(tool))
+                  setWorkbenchView('browser')
+                } else {
+                  setWorkbenchView(tool)
+                }
+              }}
             >
-              <IconCloseOutline16 size={11} aria-hidden />
-            </span>
-          </button>
-        ))}
+              <WorkbenchGlyph view={browser ? 'browser' : tool} />
+              <span>{browser
+                ? browserTabLabel(browserTabs.find(tab => tab.id === browserTabId(tool)), t)
+                : t('review.title')}</span>
+              <span
+                role="button" tabIndex={-1} className="cfx-tab-close"
+                aria-label={t('file.close')}
+                onClick={(event) => { event.stopPropagation(); closeTool(tool) }}
+              >
+                <IconCloseOutline16 size={11} aria-hidden />
+              </span>
+            </button>
+          )
+        })}
         {tabs.map(tab => (
           <button
             key={tab.path} type="button" role="tab"
@@ -436,7 +526,15 @@ export function CodexFilesPanel({
         <button
           type="button" className="cfx-native-tab-add" title={t('panel.title')}
           aria-label={t('panel.title')}
-          onClick={() => { setWorkbenchView('new-tab') }}
+          onClick={() => {
+            if (workbenchView === 'browser') {
+              const id = Math.max(0, ...browserTabs.map(tab => tab.id)) + 1
+              syncBrowserTabs([...browserTabs, createBrowserTab(id)])
+              setActiveBrowserTabId(id)
+              return
+            }
+            setWorkbenchView('new-tab')
+          }}
         >
           <PlusGlyph />
         </button>
@@ -453,12 +551,25 @@ export function CodexFilesPanel({
       </div>
 
       {workbenchView === 'review' && <div className="cfx-workbench-body"><ReviewView sessionId={sessionId} t={t} onOpenFile={openFileFromReview} /></div>}
-      {workbenchView === 'browser' && <div className="cfx-workbench-body"><BrowserView t={t} /></div>}
+      <div
+        className="cfx-workbench-body"
+        style={{ display: workbenchView === 'browser' ? undefined : 'none' }}
+        aria-hidden={workbenchView !== 'browser'}
+      >
+        <BrowserView
+          t={t}
+          tabs={browserTabs}
+          activeTabId={activeBrowserTabId}
+          onTabsChange={syncBrowserTabs}
+          onActiveTabChange={setActiveBrowserTabId}
+          visible={workbenchView === 'browser'}
+        />
+      </div>
       {workbenchView === 'new-tab' && (
         <WorkbenchActions
           t={t}
           bottomPanelOpen={bottomPanelOpen}
-          onOpen={(view) => { setWorkbenchView(view) }}
+          onOpen={(view) => { if (view === 'browser') openBrowser(); else setWorkbenchView(view) }}
         />
       )}
 
