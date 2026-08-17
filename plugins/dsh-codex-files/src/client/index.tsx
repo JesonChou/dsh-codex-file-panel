@@ -14,7 +14,9 @@ import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import { BottomPanel } from './BottomPanel.tsx'
 import { CodexFilesPanel, PanelToggle, type PanelInjected, type PanelToggleInjected } from './CodexFilesPanel.tsx'
 import { NS, en, zh } from './locales.ts'
+import { PinnedSummary, type PinnedSummaryInjected } from './PinnedSummary.tsx'
 import { CODEX_THEME_CSS } from './theme.ts'
+import { WorkbenchLauncher, type WorkbenchLauncherInjected } from './WorkbenchLauncher.tsx'
 
 export const name = 'dsh-codex-files'
 
@@ -42,16 +44,15 @@ export function apply(ctx: ClientContext): void {
   // tool-details entry (same cell, lower priority wins; the shipped entry
   // stays on the ledger and returns if this plugin unloads). The inject
   // factory runs on the entry's first render (UI ready), where opening the
-  // column is safe — Codex posture: the Files panel is a standing surface.
+  // column is safe. The column remains collapsed until a Codex workbench
+  // action explicitly opens it.
   ctx.slots.inject('details', () => ctx.slots.register({
     name: 'details',
     priority: -1,
     locale: NS,
     inject: (): PanelInjected => {
-      ctx.layout.openDetails()
       return {
         closeDetails: () => { ctx.layout.closeDetails() },
-        toggleSidebar: () => { ctx.layout.toggleSidebar() },
         openPath: (path: string) => { void ctx.workspaces.openPath(path) },
       }
     },
@@ -66,6 +67,16 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
   }, BottomPanel))
 
+  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
+    name: 'shell.overlay',
+    id: 'codex-files-workbench-launcher',
+    order: 90,
+    locale: NS,
+    inject: (): WorkbenchLauncherInjected => ({
+      openDetails: () => { ctx.layout.openDetails() },
+    }),
+  }, WorkbenchLauncher))
+
   // The collapsed-panel opener belongs in the right-aligned header utilities,
   // immediately after Session log/export, so it sits next to the details
   // column instead of floating beside the mode controls. It only renders while
@@ -79,4 +90,18 @@ export function apply(ctx: ClientContext): void {
       togglePanel: () => { ctx.layout.openDetails() },
     }),
   }, PanelToggle))
+
+  // Codex keeps the environment/source summary pinned over the otherwise
+  // empty workbench while its details column is closed. It mounts from a
+  // session-scoped seat for access to that session's conversation snapshot,
+  // then portals into the frame overlay so it never disturbs header geometry.
+  ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
+    name: 'conversation.session.header.utilities',
+    id: 'codex-files-pinned-summary',
+    order: 990,
+    locale: NS,
+    inject: (): PinnedSummaryInjected => ({
+      openDetails: () => { ctx.layout.openDetails() },
+    }),
+  }, PinnedSummary))
 }

@@ -9,9 +9,15 @@ import { useSyncExternalStore } from 'react'
 export interface WorkbenchUiState {
   /** Whether the Codex-style bottom panel is visible. */
   bottomPanelOpen: boolean
+  /** Surface shown when the right Codex workbench is opened. */
+  activeView: WorkbenchView
+  /** File requested by a summary/source affordance outside the details tree. */
+  fileRequest: { sessionId: string, path: string, sequence: number } | null
 }
 
-let state: WorkbenchUiState = { bottomPanelOpen: false }
+export type WorkbenchView = 'new-tab' | 'files' | 'review' | 'browser'
+
+let state: WorkbenchUiState = { bottomPanelOpen: false, activeView: 'new-tab', fileRequest: null }
 const listeners = new Set<() => void>()
 
 function emit(): void {
@@ -38,6 +44,25 @@ export function toggleBottomPanel(): void {
 
 export function openBottomPanel(): void {
   if (!state.bottomPanelOpen) setState({ bottomPanelOpen: true })
+}
+
+export function closeBottomPanel(): void {
+  if (state.bottomPanelOpen) setState({ bottomPanelOpen: false })
+}
+
+export function setWorkbenchView(activeView: WorkbenchView): void {
+  if (state.activeView !== activeView) setState({ activeView })
+}
+
+export function requestWorkbenchFile(sessionId: string, path: string): void {
+  setState({
+    activeView: 'files',
+    fileRequest: {
+      sessionId,
+      path,
+      sequence: (state.fileRequest?.sequence ?? 0) + 1,
+    },
+  })
 }
 
 export function useWorkbenchUi(): WorkbenchUiState {

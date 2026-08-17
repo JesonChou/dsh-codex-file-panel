@@ -10,6 +10,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CodexFilesPanel, type CodexFilesPanelProps } from '../src/client/CodexFilesPanel.tsx'
 import type { ListDirResult } from '../src/client/api.ts'
+import { setWorkbenchView } from '../src/client/workbench-store.ts'
 
 const listDirMock = vi.hoisted(() => vi.fn())
 const readFileMock = vi.hoisted(() => vi.fn())
@@ -65,12 +66,12 @@ const snapshot = { chat: { nodes: new Map() } }
 const sessions = { byId: { s1: { cwd: 'C:/work' } } }
 
 function panelProps(): CodexFilesPanelProps {
+  setWorkbenchView('files')
   return {
     sessionId: 's1',
     useSession: ((selector: (state: unknown) => unknown) => selector(snapshot)) as never,
     useSessions: ((selector: (state: unknown) => unknown) => selector(sessions)) as never,
     closeDetails: vi.fn(),
-    toggleSidebar: vi.fn(),
     openPath: vi.fn(),
     t,
   }
@@ -82,6 +83,7 @@ afterEach(() => {
   readFileMock.mockReset()
   writeFileMock.mockReset()
   gitInfoMock.mockReset()
+  setWorkbenchView('new-tab')
   vi.unstubAllGlobals()
 })
 

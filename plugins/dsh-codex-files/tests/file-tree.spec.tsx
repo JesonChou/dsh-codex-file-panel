@@ -75,6 +75,23 @@ describe('FileTree', () => {
     expect(onOpenFile).toHaveBeenCalledWith('x.ts')
   })
 
+  it('supports Codex-style arrow and Enter keyboard navigation', async () => {
+    const onOpenFile = vi.fn()
+    listDirMock.mockResolvedValue({ ok: true, path: '', entries: [
+      { name: 'src', dir: true },
+      { name: 'package.json', dir: false },
+    ] } satisfies ListDirResult)
+    render(<FileTree {...treeProps({ onOpenFile })} />)
+    await waitFor(() => { expect(screen.getByText('package.json')).toBeTruthy() })
+    const tree = screen.getByRole('tree')
+    fireEvent.focus(tree)
+    await waitFor(() => { expect(screen.getByText('src').closest('button')?.getAttribute('aria-current')).toBe('true') })
+    fireEvent.keyDown(tree, { key: 'ArrowDown' })
+    await waitFor(() => { expect(screen.getByText('package.json').closest('button')?.getAttribute('aria-current')).toBe('true') })
+    fireEvent.keyDown(tree, { key: 'Enter' })
+    expect(onOpenFile).toHaveBeenCalledWith('package.json')
+  })
+
   it('shows flat search results after the debounce', async () => {
     listDirMock.mockResolvedValue({ ok: true, path: '', entries: [] } satisfies ListDirResult)
     findFilesMock.mockResolvedValue({ ok: true, matches: ['src/client/index.tsx'] })

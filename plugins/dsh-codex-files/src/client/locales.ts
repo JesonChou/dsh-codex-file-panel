@@ -19,6 +19,7 @@ export const NS = 'codex-files'
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
   'panel.title': '文件',
+  'panel.tools': '工作区工具',
   'panel.toggle': '文件面板',
   'panel.close': '关闭文件面板',
   'panel.toggleSidebar': '显示/隐藏侧边栏',
@@ -98,11 +99,22 @@ export const zh = {
   'terminal.sessions': '终端会话',
   'terminal.connecting': '正在连接…',
   'terminal.retry': '重试',
+  'summary.environment': '环境信息',
+  'summary.changes': '变更',
+  'summary.local': '本地',
+  'summary.commitPush': '提交或推送',
+  'summary.prUnavailable': '无法获取拉取请求状态',
+  'summary.sources': '来源',
+  'summary.showAll': '查看全部',
+  'summary.openReview': '打开审阅',
+  'summary.openFiles': '打开文件',
+  'summary.copyBranch': '复制分支名称',
 } as const
 
 /** English dictionary (key-identical to the Chinese set). */
 export const en: Record<keyof typeof zh, string> = {
   'panel.title': 'Files',
+  'panel.tools': 'Workbench tools',
   'panel.toggle': 'Files panel',
   'panel.close': 'Close files panel',
   'panel.toggleSidebar': 'Toggle sidebar',
@@ -182,6 +194,16 @@ export const en: Record<keyof typeof zh, string> = {
   'terminal.sessions': 'Terminal sessions',
   'terminal.connecting': 'Connecting…',
   'terminal.retry': 'Retry',
+  'summary.environment': 'Environment',
+  'summary.changes': 'Changes',
+  'summary.local': 'Local',
+  'summary.commitPush': 'Commit or push',
+  'summary.prUnavailable': 'Pull request status unavailable',
+  'summary.sources': 'Sources',
+  'summary.showAll': 'View all',
+  'summary.openReview': 'Open Review',
+  'summary.openFiles': 'Open Files',
+  'summary.copyBranch': 'Copy branch name',
 }
 
 /** Typed key union of the dictionary. */

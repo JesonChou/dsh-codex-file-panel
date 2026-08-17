@@ -1,6 +1,6 @@
 {
   "name": "dsh-codex-files",
-  "description": "DSH web plugin: Codex Desktop-style experience — global Codex dark theme, layout polish, and a right-side Files panel with session file list, preview, and edit/save.",
+  "description": "DSH web plugin: Codex Desktop-style workbench with native right-panel tabs, file editing, review, browser, and an integrated bottom terminal.",
   "keywords": [
     "dsh",
     "deepseek-harness",
@@ -9,7 +9,7 @@
     "files",
     "editor"
   ],
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "main": "lib/index.js",

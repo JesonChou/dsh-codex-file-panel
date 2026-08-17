@@ -17,6 +17,10 @@ interface TreeRow {
   dir: boolean
 }
 
+interface FocusableRow extends TreeRow {
+  depth: number
+}
+
 /** Tree props. */
 export interface FileTreeProps {
   sessionId: string
@@ -90,6 +94,8 @@ export function FileTree({ sessionId, status, onOpenFile, t }: FileTreeProps) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<string[] | null>(null)
   const [searching, setSearching] = useState(false)
+  const [focusedPath, setFocusedPath] = useState<string | null>(null)
+  const treeRef = useRef<HTMLDivElement>(null)
   const searchTimer = useRef<number | null>(null)
   // Loaded-path bookkeeping lives in a ref, NOT in state: reading `dirs`
   // inside loadDir would rebuild the callback on every listing and re-run
@@ -150,6 +156,7 @@ export function FileTree({ sessionId, status, onOpenFile, t }: FileTreeProps) {
     setResults(null)
     setQuery('')
     setErrors(new Set())
+    setFocusedPath(null)
     void loadDir('')
   }, [loadDir, sessionId])
 
@@ -179,6 +186,60 @@ export function FileTree({ sessionId, status, onOpenFile, t }: FileTreeProps) {
     })
     void loadDir(path)
   }, [loadDir])
+
+  const visibleRows = useMemo(() => {
+    const rows: FocusableRow[] = []
+    const visit = (path: string, depth: number): void => {
+      for (const entry of dirs.get(path) ?? []) {
+        const child = path === '' ? entry.name : `${path}/${entry.name}`
+        rows.push({ path: child, name: entry.name, dir: entry.dir, depth })
+        if (entry.dir && expanded.has(child)) visit(child, depth + 1)
+      }
+    }
+    visit('', 0)
+    return rows
+  }, [dirs, expanded])
+
+  const moveFocus = useCallback((delta: number) => {
+    if (visibleRows.length === 0) return
+    const current = focusedPath === null ? -1 : visibleRows.findIndex(row => row.path === focusedPath)
+    const next = Math.max(0, Math.min(visibleRows.length - 1, current + delta))
+    const nextPath = visibleRows[next]?.path ?? null
+    setFocusedPath(nextPath)
+    const focusRow = (): void => {
+      const row = Array.from(treeRef.current?.querySelectorAll<HTMLElement>('[data-cfx-tree-path]') ?? [])
+        .find(element => element.dataset.cfxTreePath === nextPath)
+      row?.focus()
+      row?.scrollIntoView?.({ block: 'nearest' })
+    }
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(focusRow)
+    else focusRow()
+  }, [focusedPath, visibleRows])
+
+  const handleTreeKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault()
+      moveFocus(event.key === 'ArrowDown' ? 1 : -1)
+      return
+    }
+    if (focusedPath === null) return
+    const row = visibleRows.find(item => item.path === focusedPath)
+    if (row === undefined) return
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      if (row.dir) toggleDir(row.path)
+      else onOpenFile(row.path)
+    } else if (event.key === 'ArrowRight' && row.dir && !expanded.has(row.path)) {
+      event.preventDefault()
+      toggleDir(row.path)
+    } else if (event.key === 'ArrowLeft' && row.dir && expanded.has(row.path)) {
+      event.preventDefault()
+      toggleDir(row.path)
+    } else if (event.key === 'Escape' && query !== '') {
+      event.preventDefault()
+      setQuery('')
+    }
+  }, [expanded, focusedPath, moveFocus, onOpenFile, query, toggleDir, visibleRows])
 
   /** One recursion level of the tree. */
   const renderLevel = useCallback((path: string, depth: number): JSX.Element[] => {
@@ -210,8 +271,14 @@ export function FileTree({ sessionId, status, onOpenFile, t }: FileTreeProps) {
         rows.push((
           <button
             key={child} type="button" className="cfx-tree-row"
+            role="treeitem"
+            data-cfx-tree-path={child}
+            aria-current={focusedPath === child ? 'true' : undefined}
+            aria-expanded={isOpen}
+            tabIndex={focusedPath === child ? 0 : -1}
             style={{ paddingLeft: `${10 + depth * 14}px` }}
-            onClick={() => { toggleDir(child) }}
+            onFocus={() => { setFocusedPath(child) }}
+            onClick={() => { setFocusedPath(child); toggleDir(child) }}
             title={child}
           >
             <span className={`cfx-tree-caret${isOpen ? ' cfx-tree-caret-open' : ''}`}>
@@ -229,8 +296,13 @@ export function FileTree({ sessionId, status, onOpenFile, t }: FileTreeProps) {
         rows.push((
           <button
             key={child} type="button" className="cfx-tree-row"
+            role="treeitem"
+            data-cfx-tree-path={child}
+            aria-current={focusedPath === child ? 'true' : undefined}
+            tabIndex={focusedPath === child ? 0 : -1}
             style={{ paddingLeft: `${10 + depth * 14}px` }}
-            onClick={() => { onOpenFile(child) }}
+            onFocus={() => { setFocusedPath(child) }}
+            onClick={() => { setFocusedPath(child); onOpenFile(child) }}
             title={child}
           >
             <span className="cfx-tree-caret" />
@@ -242,7 +314,7 @@ export function FileTree({ sessionId, status, onOpenFile, t }: FileTreeProps) {
       }
     }
     return rows
-  }, [dirs, expanded, loading, errors, status, toggleDir, retryDir, onOpenFile, t])
+  }, [dirs, expanded, errors, focusedPath, status, toggleDir, retryDir, onOpenFile, t])
 
   const treeBody = useMemo(
     () => renderLevel('', 0),
@@ -263,7 +335,15 @@ export function FileTree({ sessionId, status, onOpenFile, t }: FileTreeProps) {
           aria-label={t('tree.search')}
         />
       </div>
-      <div className="cfx-tree-scroll">
+      <div
+        ref={treeRef}
+        className="cfx-tree-scroll"
+        role="tree"
+        tabIndex={0}
+        aria-label={t('tree.workspace')}
+        onFocus={() => { if (focusedPath === null) setFocusedPath(visibleRows[0]?.path ?? null) }}
+        onKeyDown={handleTreeKeyDown}
+      >
         {searchingFor !== '' ? (
           searching
             ? <div className="cfx-tree-row cfx-tree-loading">{t('file.loading')}</div>

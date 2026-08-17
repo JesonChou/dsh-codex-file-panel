@@ -21,7 +21,7 @@ export type BottomPanelProps =
   PropsRuntime<'shell.overlay'> & PropsLocale<'codex-files'>
 
 const MIN_TERMINAL_HEIGHT = 160
-const DEFAULT_TERMINAL_HEIGHT = '42vh'
+const DEFAULT_TERMINAL_HEIGHT = '30vh'
 const MAX_TERMINAL_HEIGHT_RATIO = 0.78
 
 /** The DSH three-column frame is the overlay slot's parent. */
@@ -49,6 +49,13 @@ export function BottomPanel({ useSessions, t }: BottomPanelProps) {
   }, [sessionId])
 
   const closeTab = useCallback((tab: string) => {
+    if (terminalTabs.length === 1) {
+      setTerminalTabs(['bottom-terminal-1'])
+      setActiveTab('bottom-terminal-1')
+      nextTabNumber.current = 1
+      toggleBottomPanel()
+      return
+    }
     const next = terminalTabs.filter(item => item !== tab)
     setTerminalTabs(next)
     if (activeTab === tab) setActiveTab(next[0] ?? 'bottom-terminal-1')
@@ -140,31 +147,7 @@ export function BottomPanel({ useSessions, t }: BottomPanelProps) {
         onPointerUp={endResize}
         onPointerCancel={endResize}
       />
-      <div className="cfx-bottom-panel-header">
-        <div className="cfx-terminal-identity">
-          <TerminalGlyph />
-          <strong>{t('terminal.title')}</strong>
-          {cwd !== undefined && cwd !== '' && <span title={cwd}>{cwd}</span>}
-        </div>
-        <div className="cfx-terminal-header-actions">
-          <button
-            type="button" className="cfx-terminal-action"
-            aria-label={t('terminal.new')} title={t('terminal.new')}
-            onClick={addTab}
-          >
-            <IconPlusOutline16 size={14} />
-          </button>
-          <button
-            type="button" className="cfx-terminal-action"
-            aria-label={t('panel.close')} title={t('panel.close')}
-            onClick={toggleBottomPanel}
-          >
-            <IconCloseOutline16 size={14} />
-          </button>
-        </div>
-      </div>
-      {terminalTabs.length > 1 && (
-        <nav className="cfx-terminal-session-rail" aria-label={t('terminal.sessions')}>
+      <nav className="cfx-terminal-session-rail" aria-label={t('terminal.sessions')}>
           <div className="cfx-terminal-session-rail-list">
             {terminalTabs.map((tab, index) => (
               <div
@@ -179,10 +162,9 @@ export function BottomPanel({ useSessions, t }: BottomPanelProps) {
                 >
                   <span
                     className={`cfx-terminal-session-status${activeTab === tab ? ' cfx-terminal-session-status-active' : ''}`}
-                    aria-hidden
-                  />
+                    aria-hidden><TerminalGlyph /></span>
                   <span className="cfx-terminal-session-title">
-                    {t('terminal.title')} {index + 1}
+                    {cwd !== undefined && cwd !== '' ? cwd : `${t('terminal.title')} ${index + 1}`}
                   </span>
                 </button>
                 <button
@@ -194,9 +176,22 @@ export function BottomPanel({ useSessions, t }: BottomPanelProps) {
                 </button>
               </div>
             ))}
+            <button
+              type="button" className="cfx-terminal-tab-add"
+              aria-label={t('terminal.new')} title={t('terminal.new')}
+              onClick={addTab}
+            >
+              <IconPlusOutline16 size={14} />
+            </button>
           </div>
-        </nav>
-      )}
+          <button
+            type="button" className="cfx-terminal-panel-close"
+            aria-label={t('panel.close')} title={t('panel.close')}
+            onClick={toggleBottomPanel}
+          >
+            <IconCloseOutline16 size={14} />
+          </button>
+      </nav>
       <div className="cfx-bottom-panel-body">
         {terminalTabs.map(tab => (
           <div key={tab} className={`cfx-bottom-panel-terminal${activeTab === tab ? '' : ' cfx-bottom-panel-terminal-hidden'}`}>
@@ -213,8 +208,8 @@ export function BottomPanel({ useSessions, t }: BottomPanelProps) {
 function TerminalGlyph() {
   return (
     <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden>
-      <path d="M2 3.5h12v6H2zM6 9.5v3M10 9.5v3M2.5 13.5h11"
-        fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <rect x="1.8" y="2.5" width="12.4" height="10.5" rx="1.7" fill="none" stroke="currentColor" strokeWidth="1.2" />
+      <path d="m4.2 5.2 2 1.7-2 1.7M8 9.1h3" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
