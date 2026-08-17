@@ -185,7 +185,6 @@ body:not([data-ds-dark-theme]) {
   bottom: 0;
   left: 0;
   width: 16px;
-  transform: translateX(-8px);
   border: 0;
   outline: none;
   cursor: ew-resize;
@@ -197,7 +196,7 @@ body:not([data-ds-dark-theme]) {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 7.5px;
+  left: 0;
   width: 1px;
   background: linear-gradient(180deg, transparent, var(--dsw-alias-border-l4) 12%, var(--dsw-alias-border-l4) 88%, transparent);
   opacity: 0;
@@ -404,6 +403,16 @@ body:not([data-ds-dark-theme]) {
   grid-template-columns: var(--cfx-sidebar-width, 280px) minmax(0, 1fr) var(--cfx-right-panel-width, 600px) !important;
 }
 
+/* The host animates every grid-column change for panel open/close. During a
+   pointer resize that transition restarts on every move and prevents the
+   divider from tracking the pointer continuously, so native resize owns the
+   grid synchronously until capture ends. */
+[data-codex-files-frame][data-codex-files-right-panel-resizing] {
+  transition: none !important;
+  cursor: ew-resize;
+  user-select: none;
+}
+
 .cfx-summary-card {
   position: absolute;
   z-index: 40;
@@ -425,6 +434,17 @@ body:not([data-ds-dark-theme]) {
 
 [data-codex-files-frame]:not([data-details-collapsed]) .cfx-summary-card {
   right: calc(var(--cfx-right-panel-width, 600px) + 18px);
+}
+
+/* Codex's middle summary mode reserves the card visually by shifting the
+   fixed-width conversation and composer half a card to the left. This keeps
+   their left gutter and the gap before the 316px summary card balanced. The
+   widest gutter mode already has enough natural margin and the narrow
+   overlay mode intentionally floats, so neither receives this offset. */
+[data-codex-files-frame][data-codex-files-summary-mode='shift'][data-codex-files-summary-visible] [data-chat-flow],
+[data-codex-files-frame][data-codex-files-summary-mode='shift'][data-codex-files-summary-visible] [data-composer-card] {
+  transform: translateX(-158px);
+  transition: transform var(--ds-transition-duration-slow) var(--ds-ease-in-out);
 }
 
 .cfx-summary-card-overlay {

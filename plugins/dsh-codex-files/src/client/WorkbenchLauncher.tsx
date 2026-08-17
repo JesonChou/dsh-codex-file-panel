@@ -1,5 +1,5 @@
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useState } from 'react'
 import { parseSidebarWidth } from './workbench-layout.ts'
 import {
   setWorkbenchView,
@@ -79,7 +79,7 @@ export function WorkbenchLauncher({ openDetails }: WorkbenchLauncherProps) {
     }
   }, [])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (frame === null) return
     setCssPixel(frame, '--cfx-sidebar-width', sidebarWidth)
     setCssPixel(frame, '--cfx-right-panel-width', rightPanelWidth)

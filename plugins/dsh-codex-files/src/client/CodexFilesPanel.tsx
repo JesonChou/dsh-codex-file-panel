@@ -314,6 +314,7 @@ export function CodexFilesPanel({
 
   const beginPanelResize = useCallback((event: ReactPointerEvent<HTMLDivElement>): void => {
     if (panelExpanded || rootRef.current === null) return
+    event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
     const startWidth = rootRef.current.getBoundingClientRect().width
     resizeRef.current = {
@@ -328,6 +329,7 @@ export function CodexFilesPanel({
   const resizePanel = useCallback((event: ReactPointerEvent<HTMLDivElement>): void => {
     const resize = resizeRef.current
     if (resize === null || resize.pointerId !== event.pointerId) return
+    event.preventDefault()
     const rawWidth = resize.startWidth + resize.startX - event.clientX
     if (rawWidth < RIGHT_PANEL_CLOSE_THRESHOLD) {
       resizeRef.current = null
@@ -337,6 +339,10 @@ export function CodexFilesPanel({
     }
     const nextWidth = clamp(rawWidth, RIGHT_PANEL_MIN_WIDTH, rightPanelMaximumWidth(mainContentWidth))
     resize.lastWidth = nextWidth
+    // Keep the divider under the pointer even when React is rendering a large
+    // conversation tree. The shared store remains the source of truth; this
+    // synchronous CSS write only avoids a frame of scheduler latency.
+    findLayoutFrame(rootRef.current)?.style.setProperty('--cfx-right-panel-width', `${nextWidth}px`)
     setRightPanelWidth(nextWidth, false)
   }, [closePanel, mainContentWidth])
 
@@ -385,6 +391,7 @@ export function CodexFilesPanel({
           onPointerMove={resizePanel}
           onPointerUp={endPanelResize}
           onPointerCancel={endPanelResize}
+          onLostPointerCapture={endPanelResize}
         />
       )}
       <div className="cfx-native-tabs" role="tablist">
