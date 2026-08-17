@@ -6,7 +6,11 @@
  * conversation snapshot plus its own local tab/edit state; nothing here
  * mutates the session.
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from 'react'
 import {
   IconBrowseOutline16, IconCheckOutline16, IconChevronLeftOutline14,
   IconCloseOutline16, IconCodeOutline16, IconCopyOutline16, IconEditOutline16,
@@ -22,7 +26,15 @@ import { isBinaryPreviewKind, previewKindFor } from './preview-logic.ts'
 import { FilePreview } from './preview.tsx'
 import { isDetailsCollapsed } from './panel-toggle.ts'
 import { ReviewView } from './ReviewView.tsx'
-import { setWorkbenchView, toggleBottomPanel, useWorkbenchUi, type WorkbenchView } from './workbench-store.ts'
+import {
+  resetRightPanelWidth, setPanelExpanded as setWorkbenchPanelExpanded,
+  setRightPanelWidth, setWorkbenchView, toggleBottomPanel, useWorkbenchUi,
+  type WorkbenchView,
+} from './workbench-store.ts'
+import {
+  clamp, RIGHT_PANEL_CLOSE_THRESHOLD, RIGHT_PANEL_MIN_WIDTH,
+  rightPanelMaximumWidth,
+} from './workbench-layout.ts'
 import {
   collectSessionFiles, sessionFilesEqual, splitDisplayPath,
   toDiffHunks, type SessionFile,
@@ -93,39 +105,51 @@ export function CodexFilesPanel({
   const [savedFlash, setSavedFlash] = useState(false)
   const [copiedFlash, setCopiedFlash] = useState(false)
   const [viewMode, setViewMode] = useState<'content' | 'diff'>('content')
-  const { activeView: workbenchView, bottomPanelOpen, fileRequest } = useWorkbenchUi()
+  const {
+    activeView: workbenchView, bottomPanelOpen, fileRequest,
+    mainContentWidth, rightPanelWidth,
+  } = useWorkbenchUi()
   const [openTools, setOpenTools] = useState<Array<'review' | 'browser'>>([])
   const [panelExpanded, setPanelExpanded] = useState(false)
   const [branch, setBranch] = useState<string | null>(null)
   const [repo, setRepo] = useState<string | null>(null)
   const [statusMap, setStatusMap] = useState<Record<string, string>>({})
   const rootRef = useRef<HTMLDivElement>(null)
+  const resizeRef = useRef<{ pointerId: number; startX: number; startWidth: number; lastWidth: number } | null>(null)
   const activeTab = tabs.find(tab => tab.path === activePath)
   const activeFile = useMemo(
     () => files.find(file => file.path === activePath),
     [activePath, files],
   )
 
-  // Expanding the right panel is a layout-level action, not a fixed overlay:
-  // mark the DSH frame so its grid tracks collapse sidebar/center and give the
-  // details column the full frame width. Restoring removes the marker and
-  // lets the normal three-column concession solve return.
+  // Native full-width mode keeps the left sidebar independent and gives the
+  // right panel all remaining shell width. The geometry bridge recomputes the
+  // first track from the host's inline grid whenever the sidebar changes.
   useLayoutEffect(() => {
     const frame = findLayoutFrame(rootRef.current)
     if (frame === null) return
+    setWorkbenchPanelExpanded(panelExpanded)
     if (panelExpanded) {
-      const sidebar = frame.firstElementChild as HTMLElement | null
       frame.setAttribute('data-codex-files-layout-expanded', 'true')
-      frame.style.setProperty('--cfx-expanded-sidebar-width', `${sidebar?.getBoundingClientRect().width ?? 0}px`)
     } else {
       frame.removeAttribute('data-codex-files-layout-expanded')
-      frame.style.removeProperty('--cfx-expanded-sidebar-width')
     }
     return () => {
       frame.removeAttribute('data-codex-files-layout-expanded')
-      frame.style.removeProperty('--cfx-expanded-sidebar-width')
+      setWorkbenchPanelExpanded(false)
     }
   }, [panelExpanded])
+
+  useEffect(() => {
+    const frame = findLayoutFrame(rootRef.current)
+    if (frame === null) return
+    const clearExpandedWhenClosed = (): void => {
+      if (frame.hasAttribute('data-details-collapsed')) setPanelExpanded(false)
+    }
+    const observer = new MutationObserver(clearExpandedWhenClosed)
+    observer.observe(frame, { attributes: true, attributeFilter: ['data-details-collapsed'] })
+    return () => { observer.disconnect() }
+  }, [])
 
   // A session switch resets the panel's whole local state (details is a
   // session-scope seat; the component instance survives the switch).
@@ -282,12 +306,87 @@ export function CodexFilesPanel({
 
   const dirtyCount = tabs.filter(tab => tab.editing).length
 
+  const closePanel = useCallback((): void => {
+    setPanelExpanded(false)
+    setWorkbenchPanelExpanded(false)
+    closeDetails()
+  }, [closeDetails])
+
+  const beginPanelResize = useCallback((event: ReactPointerEvent<HTMLDivElement>): void => {
+    if (panelExpanded || rootRef.current === null) return
+    event.currentTarget.setPointerCapture(event.pointerId)
+    const startWidth = rootRef.current.getBoundingClientRect().width
+    resizeRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth,
+      lastWidth: startWidth,
+    }
+    findLayoutFrame(rootRef.current)?.setAttribute('data-codex-files-right-panel-resizing', 'true')
+  }, [panelExpanded])
+
+  const resizePanel = useCallback((event: ReactPointerEvent<HTMLDivElement>): void => {
+    const resize = resizeRef.current
+    if (resize === null || resize.pointerId !== event.pointerId) return
+    const rawWidth = resize.startWidth + resize.startX - event.clientX
+    if (rawWidth < RIGHT_PANEL_CLOSE_THRESHOLD) {
+      resizeRef.current = null
+      findLayoutFrame(rootRef.current)?.removeAttribute('data-codex-files-right-panel-resizing')
+      closePanel()
+      return
+    }
+    const nextWidth = clamp(rawWidth, RIGHT_PANEL_MIN_WIDTH, rightPanelMaximumWidth(mainContentWidth))
+    resize.lastWidth = nextWidth
+    setRightPanelWidth(nextWidth, false)
+  }, [closePanel, mainContentWidth])
+
+  const endPanelResize = useCallback((event: ReactPointerEvent<HTMLDivElement>): void => {
+    const resize = resizeRef.current
+    if (resize === null || resize.pointerId !== event.pointerId) return
+    resizeRef.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    findLayoutFrame(rootRef.current)?.removeAttribute('data-codex-files-right-panel-resizing')
+    setRightPanelWidth(resize.lastWidth)
+  }, [])
+
+  const resizePanelWithKeyboard = useCallback((event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    const maximum = rightPanelMaximumWidth(mainContentWidth)
+    let next: number | null = null
+    if (event.key === 'Home') next = RIGHT_PANEL_MIN_WIDTH
+    else if (event.key === 'End') next = maximum
+    else if (event.key === 'ArrowLeft') next = rightPanelWidth + 10
+    else if (event.key === 'ArrowRight') next = rightPanelWidth - 10
+    if (next === null) return
+    event.preventDefault()
+    setRightPanelWidth(clamp(next, RIGHT_PANEL_MIN_WIDTH, maximum))
+  }, [mainContentWidth, rightPanelWidth])
+
   return (
     <div
       ref={rootRef}
       className={`cfx-panel${panelExpanded ? ' cfx-panel-expanded' : ''}`}
       data-codex-files-panel
     >
+      {!panelExpanded && (
+        <div
+          className="cfx-panel-resize-handle"
+          role="separator"
+          aria-label={t('panel.resizeRight')}
+          aria-orientation="vertical"
+          aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
+          aria-valuemax={Math.round(rightPanelMaximumWidth(mainContentWidth))}
+          aria-valuenow={Math.round(rightPanelWidth)}
+          tabIndex={0}
+          onDoubleClick={resetRightPanelWidth}
+          onKeyDown={resizePanelWithKeyboard}
+          onPointerDown={beginPanelResize}
+          onPointerMove={resizePanel}
+          onPointerUp={endPanelResize}
+          onPointerCancel={endPanelResize}
+        />
+      )}
       <div className="cfx-native-tabs" role="tablist">
         {openTools.map(view => (
           <button
@@ -341,7 +440,7 @@ export function CodexFilesPanel({
         <button type="button" className={`cfx-icon-button${panelExpanded ? ' cfx-icon-button-active' : ''}`} title={t(panelExpanded ? 'panel.collapse' : 'panel.expand')} aria-label={t(panelExpanded ? 'panel.collapse' : 'panel.expand')} aria-pressed={panelExpanded} onClick={() => { setPanelExpanded(value => !value) }}>
           <IconFullscreenOutline16 size={14} aria-hidden />
         </button>
-        <button type="button" className="cfx-icon-button" title={t('panel.close')} aria-label={t('panel.close')} onClick={closeDetails}>
+        <button type="button" className="cfx-icon-button" title={t('panel.close')} aria-label={t('panel.close')} onClick={closePanel}>
           <IconPanelLeftOutline16 className="cfx-panel-right-icon" size={14} aria-hidden />
         </button>
       </div>

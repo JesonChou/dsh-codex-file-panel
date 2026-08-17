@@ -27,6 +27,7 @@ export const zh = {
   'panel.expand': '展开/收起右侧面板',
   'panel.collapse': '还原右侧面板宽度',
   'panel.resizeBottom': '调整底部面板高度',
+  'panel.resizeRight': '调整右侧面板宽度',
   'panel.refresh': '刷新文件',
   'panel.empty': '这个会话还没有文件活动',
   'panel.emptyHint': '模型读写文件后会出现在这里',
@@ -109,6 +110,8 @@ export const zh = {
   'summary.openReview': '打开审阅',
   'summary.openFiles': '打开文件',
   'summary.copyBranch': '复制分支名称',
+  'summary.toggle': '切换摘要',
+  'summary.togglePinned': '切换置顶摘要',
 } as const
 
 /** English dictionary (key-identical to the Chinese set). */
@@ -122,6 +125,7 @@ export const en: Record<keyof typeof zh, string> = {
   'panel.expand': 'Expand/collapse right panel',
   'panel.collapse': 'Restore right panel width',
   'panel.resizeBottom': 'Resize bottom panel',
+  'panel.resizeRight': 'Resize right panel',
   'panel.refresh': 'Refresh file',
   'panel.empty': 'No file activity in this session yet',
   'panel.emptyHint': 'Files the model reads or writes will appear here',
@@ -204,6 +208,8 @@ export const en: Record<keyof typeof zh, string> = {
   'summary.openReview': 'Open Review',
   'summary.openFiles': 'Open Files',
   'summary.copyBranch': 'Copy branch name',
+  'summary.toggle': 'Toggle summary',
+  'summary.togglePinned': 'Toggle pinned summary',
 }
 
 /** Typed key union of the dictionary. */

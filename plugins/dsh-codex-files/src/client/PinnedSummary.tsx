@@ -1,10 +1,13 @@
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { writeClipboard } from '@deepseek-ai/dsh-client-ui-primitives'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { gitInfo } from './api.ts'
 import { collectSessionFiles, sessionFilesEqual, splitDisplayPath } from './files.ts'
-import { requestWorkbenchFile, setWorkbenchView } from './workbench-store.ts'
+import {
+  closeSummaryPopover, requestWorkbenchFile, setWorkbenchView,
+  selectSummarySession, toggleSummary, useWorkbenchUi,
+} from './workbench-store.ts'
 
 export interface PinnedSummaryInjected {
   openDetails: () => void
@@ -15,29 +18,49 @@ export type PinnedSummaryProps =
   PinnedSummaryInjected &
   PropsLocale<'codex-files'>
 
-/** Codex's compact thread summary, pinned above the closed workbench. */
+/** Codex's compact thread summary with overlay/shift/gutter responsive modes. */
 export function PinnedSummary({
   sessionId, useSession, useSessions, openDetails, t,
 }: PinnedSummaryProps) {
   const cwd = useSessions(state => state.byId[sessionId]?.cwd)
   const files = useSession(state => collectSessionFiles(state), sessionFilesEqual)
   const [portalHost, setPortalHost] = useState<HTMLElement | null>(null)
-  const [collapsed, setCollapsed] = useState(false)
   const [branch, setBranch] = useState<string | null>(null)
   const [repo, setRepo] = useState<string | null>(null)
   const [statusCount, setStatusCount] = useState(0)
+  const toggleRef = useRef<HTMLButtonElement>(null)
+  const {
+    panelExpanded, summaryDisplayMode, summaryPinned, summaryPopoverOpen,
+  } = useWorkbenchUi()
 
   useEffect(() => {
     const overlay = document.querySelector<HTMLElement>('[data-shell-overlay]')
-    const frame = overlay?.parentElement ?? null
-    if (overlay === null || frame === null) return
+    if (overlay === null) return
     setPortalHost(overlay)
-    const update = (): void => { setCollapsed(frame.hasAttribute('data-details-collapsed')) }
-    update()
-    const observer = new MutationObserver(update)
-    observer.observe(frame, { attributes: true, attributeFilter: ['data-details-collapsed'] })
-    return () => { observer.disconnect() }
   }, [])
+
+  useEffect(() => {
+    selectSummarySession(sessionId)
+  }, [sessionId])
+
+  useEffect(() => {
+    if (summaryDisplayMode !== 'overlay' || !summaryPopoverOpen) return
+    const onPointerDown = (event: PointerEvent): void => {
+      const target = event.target as Node | null
+      if (toggleRef.current?.contains(target) === true) return
+      if (target instanceof Element && target.closest('.cfx-summary-card') !== null) return
+      closeSummaryPopover(sessionId)
+    }
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') closeSummaryPopover(sessionId)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [sessionId, summaryDisplayMode, summaryPopoverOpen])
 
   useEffect(() => {
     let current = true
@@ -58,15 +81,23 @@ export function PinnedSummary({
     return normalized.split(/[\\/]/).at(-1) || repo || t('summary.local')
   }, [cwd, repo, t])
 
-  if (!collapsed || portalHost === null || cwd === undefined) return null
-
   const openView = (view: 'files' | 'review'): void => {
+    closeSummaryPopover(sessionId)
     setWorkbenchView(view)
     openDetails()
   }
 
-  return createPortal(
-    <aside className="cfx-summary-card" aria-label={t('summary.environment')}>
+  const pressed = summaryDisplayMode === 'overlay' ? summaryPopoverOpen : summaryPinned
+  const visible = !panelExpanded && portalHost !== null && cwd !== undefined && (
+    summaryDisplayMode === 'overlay' ? summaryPopoverOpen : summaryPinned
+  )
+
+  const card = visible ? createPortal(
+    <aside
+      className={`cfx-summary-card cfx-summary-card-${summaryDisplayMode}`}
+      aria-label={t('summary.environment')}
+      data-summary-mode={summaryDisplayMode}
+    >
       <SummarySection
         title={t('summary.environment')}
         onAdd={() => { openView('review') }}
@@ -102,6 +133,7 @@ export function PinnedSummary({
                 title={file.path}
                 onClick={() => {
                   requestWorkbenchFile(sessionId, file.path)
+                  closeSummaryPopover(sessionId)
                   openDetails()
                 }}
               >
@@ -117,7 +149,33 @@ export function PinnedSummary({
         </SummarySection>
       )}
     </aside>,
-    portalHost,
+    portalHost!,
+  ) : null
+
+  return (
+    <>
+      <button
+        ref={toggleRef}
+        type="button"
+        className={`cfx-header-toggle cfx-summary-toggle${pressed ? ' cfx-header-toggle-active' : ''}`}
+        title={t(summaryDisplayMode === 'overlay' ? 'summary.toggle' : 'summary.togglePinned')}
+        aria-label={t(summaryDisplayMode === 'overlay' ? 'summary.toggle' : 'summary.togglePinned')}
+        aria-pressed={pressed}
+        onClick={() => { toggleSummary(sessionId) }}
+      >
+        <SummaryToggleGlyph />
+      </button>
+      {card}
+    </>
+  )
+}
+
+function SummaryToggleGlyph() {
+  return (
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden>
+      <rect x="2" y="1.75" width="12" height="12.5" rx="2" fill="none" stroke="currentColor" />
+      <path d="M5 5h6M5 8h4M5 11h2" fill="none" stroke="currentColor" strokeLinecap="round" />
+    </svg>
   )
 }
 

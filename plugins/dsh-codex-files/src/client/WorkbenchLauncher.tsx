@@ -1,7 +1,12 @@
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { useEffect, useState } from 'react'
+import { parseSidebarWidth } from './workbench-layout.ts'
 import {
-  setWorkbenchView, toggleBottomPanel, useWorkbenchUi, type WorkbenchView,
+  setWorkbenchView,
+  toggleBottomPanel,
+  updateWorkbenchGeometry,
+  useWorkbenchUi,
+  type WorkbenchView,
 } from './workbench-store.ts'
 
 export interface WorkbenchLauncherInjected {
@@ -11,40 +16,77 @@ export interface WorkbenchLauncherInjected {
 export type WorkbenchLauncherProps =
   PropsRuntime<'shell.overlay'> & WorkbenchLauncherInjected & PropsLocale<'codex-files'>
 
-function isDetailsClosed(): boolean {
-  return document.querySelector('[data-details-collapsed]') !== null
+function setCssPixel(frame: HTMLElement, name: string, value: number): void {
+  const next = `${Math.max(0, value)}px`
+  if (frame.style.getPropertyValue(name) !== next) frame.style.setProperty(name, next)
 }
 
-function shortcutLabel(key: string): string {
-  return navigator.platform.toLowerCase().includes('mac') ? key.replace('Ctrl', '⌘') : key
-}
-
-export function WorkbenchLauncher({ openDetails, t }: WorkbenchLauncherProps) {
-  const [collapsed, setCollapsed] = useState(() => isDetailsClosed())
-  const { bottomPanelOpen } = useWorkbenchUi()
+/**
+ * Non-visual shell bridge. Codex renders its launcher only inside an already
+ * open, empty right panel; closing the panel unmounts that surface completely.
+ * This component therefore owns geometry and shortcuts only.
+ */
+export function WorkbenchLauncher({ openDetails }: WorkbenchLauncherProps) {
+  const [frame, setFrame] = useState<HTMLElement | null>(null)
+  const {
+    sidebarWidth, rightPanelWidth, summaryDisplayMode, summaryPinned,
+    summaryPopoverOpen,
+  } = useWorkbenchUi()
 
   useEffect(() => {
-    const frame = document.querySelector<HTMLElement>('[data-shell-overlay]')?.parentElement ?? null
-    if (frame === null) return
-    frame.setAttribute('data-codex-files-frame', 'true')
-    const sidebar = frame.firstElementChild as HTMLElement | null
+    const nextFrame = document.querySelector<HTMLElement>('[data-shell-overlay]')?.parentElement ?? null
+    if (nextFrame === null) return
+    setFrame(nextFrame)
+    nextFrame.setAttribute('data-codex-files-frame', 'true')
+
     const updateGeometry = (): void => {
-      const width = sidebar?.getBoundingClientRect().width ?? 0
-      frame.style.setProperty('--cfx-sidebar-width', `${width}px`)
-      setCollapsed(frame.hasAttribute('data-details-collapsed'))
+      const bounds = nextFrame.getBoundingClientRect()
+      const sidebar = nextFrame.firstElementChild as HTMLElement | null
+      const measuredSidebar = sidebar?.getBoundingClientRect().width ?? 0
+      const intendedSidebar = parseSidebarWidth(nextFrame.style.gridTemplateColumns, measuredSidebar)
+      updateWorkbenchGeometry({
+        frameWidth: bounds.width,
+        shellHeight: bounds.height,
+        sidebarWidth: intendedSidebar,
+        rightPanelOpen: !nextFrame.hasAttribute('data-details-collapsed'),
+        panelExpanded: nextFrame.hasAttribute('data-codex-files-layout-expanded'),
+      })
     }
+
     updateGeometry()
     const mutation = new MutationObserver(updateGeometry)
-    mutation.observe(frame, { attributes: true, attributeFilter: ['data-details-collapsed', 'data-sidebar-collapsed'] })
+    mutation.observe(nextFrame, {
+      attributes: true,
+      attributeFilter: [
+        'data-details-collapsed',
+        'data-sidebar-collapsed',
+        'data-codex-files-layout-expanded',
+        'style',
+      ],
+    })
     const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateGeometry)
-    if (sidebar !== null) resize?.observe(sidebar)
+    resize?.observe(nextFrame)
+
     return () => {
       mutation.disconnect()
       resize?.disconnect()
-      frame.removeAttribute('data-codex-files-frame')
-      frame.style.removeProperty('--cfx-sidebar-width')
+      nextFrame.removeAttribute('data-codex-files-frame')
+      nextFrame.removeAttribute('data-codex-files-summary-mode')
+      nextFrame.removeAttribute('data-codex-files-summary-visible')
+      nextFrame.style.removeProperty('--cfx-sidebar-width')
+      nextFrame.style.removeProperty('--cfx-right-panel-width')
+      setFrame(null)
     }
   }, [])
+
+  useEffect(() => {
+    if (frame === null) return
+    setCssPixel(frame, '--cfx-sidebar-width', sidebarWidth)
+    setCssPixel(frame, '--cfx-right-panel-width', rightPanelWidth)
+    frame.setAttribute('data-codex-files-summary-mode', summaryDisplayMode)
+    const summaryVisible = summaryDisplayMode === 'overlay' ? summaryPopoverOpen : summaryPinned
+    frame.toggleAttribute('data-codex-files-summary-visible', summaryVisible)
+  }, [frame, rightPanelWidth, sidebarWidth, summaryDisplayMode, summaryPinned, summaryPopoverOpen])
 
   useEffect(() => {
     const open = (view: WorkbenchView): void => {
@@ -62,10 +104,7 @@ export function WorkbenchLauncher({ openDetails, t }: WorkbenchLauncherProps) {
       } else if (event.shiftKey && event.key.toLowerCase() === 'g') {
         event.preventDefault()
         open('review')
-      } else if (event.key === '`') {
-        event.preventDefault()
-        toggleBottomPanel()
-      } else if (event.key.toLowerCase() === 'j') {
+      } else if (event.key === '`' || event.key.toLowerCase() === 'j') {
         event.preventDefault()
         toggleBottomPanel()
       }
@@ -74,47 +113,5 @@ export function WorkbenchLauncher({ openDetails, t }: WorkbenchLauncherProps) {
     return () => { window.removeEventListener('keydown', onKeyDown) }
   }, [openDetails])
 
-  if (!collapsed) return null
-
-  const open = (view: WorkbenchView): void => {
-    setWorkbenchView(view)
-    openDetails()
-  }
-
-  return (
-    <nav className="cfx-launcher-overlay" aria-label={t('panel.tools')}>
-      <LauncherButton icon="review" label={t('review.title')} shortcut={shortcutLabel('Ctrl+Shift+G')} onClick={() => { open('review') }} />
-      <LauncherButton icon="terminal" label={t('terminal.title')} shortcut={shortcutLabel('Ctrl+`')} active={bottomPanelOpen} onClick={toggleBottomPanel} />
-      <LauncherButton icon="browser" label={t('browser.title')} shortcut={shortcutLabel('Ctrl+T')} onClick={() => { open('browser') }} />
-      <LauncherButton icon="files" label={t('panel.title')} shortcut={shortcutLabel('Ctrl+P')} onClick={() => { open('files') }} />
-    </nav>
-  )
-}
-
-function LauncherButton({ icon, label, shortcut, active = false, onClick }: {
-  icon: 'review' | 'terminal' | 'browser' | 'files'
-  label: string
-  shortcut: string
-  active?: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      type="button"
-      className={`cfx-launcher-action${active ? ' cfx-launcher-action-active' : ''}`}
-      aria-keyshortcuts={shortcut.replaceAll('+', ' ')}
-      onClick={onClick}
-    >
-      <LauncherGlyph kind={icon} />
-      <span>{label}</span>
-      <kbd>{shortcut}</kbd>
-    </button>
-  )
-}
-
-function LauncherGlyph({ kind }: { kind: 'review' | 'terminal' | 'browser' | 'files' }) {
-  if (kind === 'terminal') return <svg viewBox="0 0 16 16" aria-hidden><rect x="1.8" y="2.5" width="12.4" height="9" rx="1.7" fill="none" stroke="currentColor"/><path d="m4.3 5 2 1.7-2 1.7M8 9h3" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round"/></svg>
-  if (kind === 'browser') return <svg viewBox="0 0 16 16" aria-hidden><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor"/><path d="M2.4 8h11.2M8 2c1.6 1.7 2.4 3.7 2.4 6S9.6 12.3 8 14M8 2C6.4 3.7 5.6 5.7 5.6 8s.8 4.3 2.4 6" fill="none" stroke="currentColor"/></svg>
-  if (kind === 'files') return <svg viewBox="0 0 16 16" aria-hidden><path d="M1.8 4.5h4l1.3 1.4h7.1v6.4a1.5 1.5 0 0 1-1.5 1.5H3.3a1.5 1.5 0 0 1-1.5-1.5z" fill="none" stroke="currentColor" strokeLinejoin="round"/><path d="M1.8 5V3.7c0-.8.7-1.5 1.5-1.5h3l1.2 1.4h5.2c.8 0 1.5.7 1.5 1.5v.8" fill="none" stroke="currentColor"/></svg>
-  return <svg viewBox="0 0 16 16" aria-hidden><rect x="2" y="1.8" width="12" height="12.4" rx="2" fill="none" stroke="currentColor"/><path d="M5 5h6M5 8h6M5 11h3" fill="none" stroke="currentColor" strokeLinecap="round"/></svg>
+  return null
 }

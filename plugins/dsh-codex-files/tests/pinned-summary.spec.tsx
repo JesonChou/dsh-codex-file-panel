@@ -1,7 +1,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PinnedSummary } from '../src/client/PinnedSummary.tsx'
-import { setWorkbenchView } from '../src/client/workbench-store.ts'
+import {
+  setPanelExpanded, setSummaryPinned, setSummaryPopoverOpen,
+  setWorkbenchView, updateWorkbenchGeometry,
+} from '../src/client/workbench-store.ts'
 
 const gitInfoMock = vi.hoisted(() => vi.fn())
 const writeClipboardMock = vi.hoisted(() => vi.fn())
@@ -39,23 +42,39 @@ afterEach(() => {
   cleanup()
   gitInfoMock.mockReset()
   writeClipboardMock.mockReset()
+  setPanelExpanded(false)
+  setSummaryPinned(true)
+  setSummaryPopoverOpen(false)
   setWorkbenchView('new-tab')
   document.body.replaceChildren()
 })
 
 describe('PinnedSummary', () => {
-  it('pins Codex environment actions only while the right workbench is closed', async () => {
+  it('keeps a pinned summary independent from right-panel open state on wide layouts', async () => {
+    updateWorkbenchGeometry({ frameWidth: 2000, shellHeight: 1000, sidebarWidth: 280, rightPanelOpen: false, panelExpanded: false })
     gitInfoMock.mockResolvedValue({ ok: true, branch: 'main', repo: 'project', status: { 'a.ts': 'M' } })
     const { frame, openDetails } = renderSummary()
 
+    expect(await screen.findByRole('button', { name: 'summary.togglePinned' })).toBeTruthy()
     expect(await screen.findByLabelText('summary.environment')).toBeTruthy()
     expect(await screen.findByText('main')).toBeTruthy()
-    expect(screen.getByText('summary.prUnavailable')).toBeTruthy()
+
+    frame.removeAttribute('data-details-collapsed')
+    await waitFor(() => { expect(screen.getByLabelText('summary.environment')).toBeTruthy() })
 
     fireEvent.click(screen.getByText('summary.changes'))
     expect(openDetails).toHaveBeenCalledTimes(1)
+  })
 
-    frame.removeAttribute('data-details-collapsed')
-    await waitFor(() => { expect(screen.queryByLabelText('summary.environment')).toBeNull() })
+  it('always exposes the summary entry and uses a popover on narrow windows', async () => {
+    updateWorkbenchGeometry({ frameWidth: 1200, shellHeight: 800, sidebarWidth: 280, rightPanelOpen: false, panelExpanded: false })
+    gitInfoMock.mockResolvedValue({ ok: true, branch: 'main', repo: 'project', status: {} })
+    renderSummary()
+
+    const toggle = await screen.findByRole('button', { name: 'summary.toggle' })
+    expect(screen.queryByLabelText('summary.environment')).toBeNull()
+    fireEvent.click(toggle)
+    expect(await screen.findByLabelText('summary.environment')).toBeTruthy()
+    expect(toggle.getAttribute('aria-pressed')).toBe('true')
   })
 })

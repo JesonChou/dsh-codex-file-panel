@@ -11,18 +11,27 @@ import {
 import type { PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   useCallback, useEffect, useLayoutEffect, useRef, useState,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
 import { createPortal } from 'react-dom'
 import { TerminalView } from './TerminalView.tsx'
+import {
+  clampTerminalHeight, TERMINAL_CLOSE_THRESHOLD, TERMINAL_DEFAULT_HEIGHT,
+  TERMINAL_MIN_HEIGHT, TERMINAL_MAX_HEIGHT_RATIO,
+} from './workbench-layout.ts'
 import { toggleBottomPanel, useWorkbenchUi } from './workbench-store.ts'
 
 export type BottomPanelProps =
   PropsRuntime<'shell.overlay'> & PropsLocale<'codex-files'>
 
-const MIN_TERMINAL_HEIGHT = 160
-const DEFAULT_TERMINAL_HEIGHT = '30vh'
-const MAX_TERMINAL_HEIGHT_RATIO = 0.78
+const TERMINAL_HEIGHT_KEY = 'dsh-codex-files:bottom-panel-height:v1'
+
+function readTerminalHeight(): number {
+  if (typeof window === 'undefined' || window.localStorage === undefined) return TERMINAL_DEFAULT_HEIGHT
+  const stored = Number.parseFloat(window.localStorage.getItem(TERMINAL_HEIGHT_KEY) ?? '')
+  return Number.isFinite(stored) ? stored : TERMINAL_DEFAULT_HEIGHT
+}
 
 /** The DSH three-column frame is the overlay slot's parent. */
 function findLayoutFrame(): HTMLElement | null {
@@ -38,7 +47,7 @@ export function BottomPanel({ useSessions, t }: BottomPanelProps) {
   const [terminalTabs, setTerminalTabs] = useState<string[]>(['bottom-terminal-1'])
   const [activeTab, setActiveTab] = useState('bottom-terminal-1')
   const [frame, setFrame] = useState<HTMLElement | null>(() => findLayoutFrame())
-  const [heightPx, setHeightPx] = useState<number | null>(null)
+  const [heightPx, setHeightPx] = useState(readTerminalHeight)
   const nextTabNumber = useRef(1)
   const resizeRef = useRef<{ startY: number; startHeight: number; lastHeight?: number } | null>(null)
   const resizeFrameRef = useRef<number | null>(null)
@@ -86,8 +95,14 @@ export function BottomPanel({ useSessions, t }: BottomPanelProps) {
     const start = resizeRef.current
     if (start === null || frame === null || !event.currentTarget.hasPointerCapture(event.pointerId)) return
     const frameHeight = frame.getBoundingClientRect().height
-    const maxHeight = Math.max(MIN_TERMINAL_HEIGHT, Math.round(frameHeight * MAX_TERMINAL_HEIGHT_RATIO))
-    const nextHeight = Math.min(maxHeight, Math.max(MIN_TERMINAL_HEIGHT, start.startHeight + start.startY - event.clientY))
+    const rawHeight = start.startHeight + start.startY - event.clientY
+    if (rawHeight < TERMINAL_CLOSE_THRESHOLD) {
+      resizeRef.current = null
+      frame.removeAttribute('data-codex-files-bottom-panel-resizing')
+      toggleBottomPanel()
+      return
+    }
+    const nextHeight = clampTerminalHeight(rawHeight, frameHeight)
     start.lastHeight = nextHeight
     if (resizeFrameRef.current !== null) cancelAnimationFrame(resizeFrameRef.current)
     resizeFrameRef.current = requestAnimationFrame(() => {
@@ -105,10 +120,36 @@ export function BottomPanel({ useSessions, t }: BottomPanelProps) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
     const finishedHeight = resizeRef.current?.lastHeight ?? resizeRef.current?.startHeight
-    if (finishedHeight !== undefined) setHeightPx(finishedHeight)
+    if (finishedHeight !== undefined) {
+      setHeightPx(finishedHeight)
+      window.localStorage?.setItem(TERMINAL_HEIGHT_KEY, String(finishedHeight))
+    }
     if (frame !== null) frame.removeAttribute('data-codex-files-bottom-panel-resizing')
     resizeRef.current = null
   }, [frame])
+
+  const resetHeight = useCallback((): void => {
+    const next = frame === null
+      ? TERMINAL_DEFAULT_HEIGHT
+      : clampTerminalHeight(TERMINAL_DEFAULT_HEIGHT, frame.getBoundingClientRect().height)
+    setHeightPx(next)
+    window.localStorage?.removeItem(TERMINAL_HEIGHT_KEY)
+  }, [frame])
+
+  const resizeWithKeyboard = useCallback((event: ReactKeyboardEvent<HTMLDivElement>): void => {
+    if (frame === null) return
+    const maximum = Math.max(TERMINAL_MIN_HEIGHT, frame.getBoundingClientRect().height * TERMINAL_MAX_HEIGHT_RATIO)
+    let next: number | null = null
+    if (event.key === 'Home') next = TERMINAL_MIN_HEIGHT
+    else if (event.key === 'End') next = maximum
+    else if (event.key === 'ArrowUp') next = heightPx + 10
+    else if (event.key === 'ArrowDown') next = heightPx - 10
+    if (next === null) return
+    event.preventDefault()
+    const clamped = clampTerminalHeight(next, frame.getBoundingClientRect().height)
+    setHeightPx(clamped)
+    window.localStorage?.setItem(TERMINAL_HEIGHT_KEY, String(clamped))
+  }, [frame, heightPx])
 
   useEffect(() => () => {
     if (resizeFrameRef.current !== null) cancelAnimationFrame(resizeFrameRef.current)
@@ -130,7 +171,8 @@ export function BottomPanel({ useSessions, t }: BottomPanelProps) {
 
   useLayoutEffect(() => {
     if (frame === null || !bottomPanelOpen) return
-    frame.style.setProperty('--cfx-bottom-panel-height', heightPx === null ? DEFAULT_TERMINAL_HEIGHT : `${heightPx}px`)
+    const clamped = clampTerminalHeight(heightPx, frame.getBoundingClientRect().height)
+    frame.style.setProperty('--cfx-bottom-panel-height', `${clamped}px`)
   }, [bottomPanelOpen, frame, heightPx])
 
   if (!bottomPanelOpen || sessionId === undefined) return null
@@ -142,6 +184,12 @@ export function BottomPanel({ useSessions, t }: BottomPanelProps) {
         aria-orientation="horizontal"
         aria-label={t('panel.resizeBottom')}
         title={t('panel.resizeBottom')}
+        aria-valuemin={TERMINAL_MIN_HEIGHT}
+        aria-valuemax={frame === null ? undefined : Math.round(Math.max(TERMINAL_MIN_HEIGHT, frame.getBoundingClientRect().height * TERMINAL_MAX_HEIGHT_RATIO))}
+        aria-valuenow={Math.round(heightPx)}
+        tabIndex={0}
+        onDoubleClick={resetHeight}
+        onKeyDown={resizeWithKeyboard}
         onPointerDown={beginResize}
         onPointerMove={resizeTerminal}
         onPointerUp={endResize}

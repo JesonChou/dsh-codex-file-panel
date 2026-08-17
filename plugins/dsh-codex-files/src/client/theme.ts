@@ -166,6 +166,7 @@ body:not([data-ds-dark-theme]) {
 /* ── Codex Files panel ────────────────────────────────────────────────── */
 
 .cfx-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -174,6 +175,39 @@ body:not([data-ds-dark-theme]) {
   color: var(--dsw-alias-label-primary);
   font-size: 13px;
   line-height: 1.5;
+  container-type: inline-size;
+}
+
+.cfx-panel-resize-handle {
+  position: absolute;
+  z-index: 30;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 16px;
+  transform: translateX(-8px);
+  border: 0;
+  outline: none;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.cfx-panel-resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 7.5px;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, var(--dsw-alias-border-l4) 12%, var(--dsw-alias-border-l4) 88%, transparent);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.cfx-panel-resize-handle:hover::after,
+.cfx-panel-resize-handle:focus-visible::after,
+[data-codex-files-right-panel-resizing] .cfx-panel-resize-handle::after {
+  opacity: 1;
 }
 
 .cfx-panel-expanded {
@@ -339,7 +373,7 @@ body:not([data-ds-dark-theme]) {
   font-weight: 400;
 }
 
-@media (max-width: 1439px) {
+@container (max-width: 899px) {
   .cfx-files-workspace {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -350,49 +384,33 @@ body:not([data-ds-dark-theme]) {
   }
 }
 
-/* Codex uses the right half of the canvas as a workbench, rather than the
-   host's narrow details inspector. Keep the host geometry on compact windows
-   and switch to the split-canvas proportions only where both panes remain
-   usable. */
-@media (min-width: 1440px) {
-  [data-codex-files-frame] {
-    --cfx-workbench-width: clamp(680px, 46vw, 1000px);
-  }
-
-  [data-codex-files-frame]:not([data-details-collapsed]):not([data-codex-files-layout-expanded]) {
-    grid-template-columns: var(--cfx-sidebar-width, 280px) minmax(560px, 1fr) var(--cfx-workbench-width) !important;
-  }
-
-  [data-codex-files-frame][data-details-collapsed] > :nth-child(2) {
-    margin-right: var(--cfx-workbench-width);
-    border-right: 1px solid var(--dsw-alias-border-l1);
-  }
+/* The host keeps a separate 300–520px details preference and places its
+   visible pill from that stale value. Codex owns the actual edge and stores a
+   normalized width, so hide only the host handle and solve the tracks here. */
+[data-codex-files-frame] > [data-side='details'] {
+  display: none !important;
 }
 
-.cfx-launcher-overlay {
-  position: absolute;
-  z-index: 1;
-  top: 64px;
-  right: 0;
-  bottom: 0;
-  width: var(--cfx-workbench-width, min(46vw, 1000px));
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding: 8px;
-  pointer-events: auto;
+/* DSH keeps the details React tree mounted at a zero-width track. Without
+   clipping, the empty-state action list overflows hundreds of pixels back
+   into the conversation after the user closes the panel. */
+[data-codex-files-frame][data-details-collapsed] > :nth-child(3) {
+  visibility: hidden;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+[data-codex-files-frame]:not([data-details-collapsed]):not([data-codex-files-layout-expanded]) {
+  grid-template-columns: var(--cfx-sidebar-width, 280px) minmax(0, 1fr) var(--cfx-right-panel-width, 600px) !important;
 }
 
 .cfx-summary-card {
   position: absolute;
-  z-index: 2;
+  z-index: 40;
   top: 74px;
   right: 18px;
-  display: none;
-  width: min(320px, calc(var(--cfx-workbench-width, 680px) - 36px));
+  display: block;
+  width: min(316px, calc(100% - 36px));
   max-height: calc(100% - 96px);
   overflow: auto;
   box-sizing: border-box;
@@ -403,6 +421,14 @@ body:not([data-ds-dark-theme]) {
   box-shadow: 0 10px 28px var(--dsw-alias-bg-mask-2, rgba(0, 0, 0, 0.12));
   pointer-events: auto;
   scrollbar-width: none;
+}
+
+[data-codex-files-frame]:not([data-details-collapsed]) .cfx-summary-card {
+  right: calc(var(--cfx-right-panel-width, 600px) + 18px);
+}
+
+.cfx-summary-card-overlay {
+  box-shadow: 0 18px 48px var(--dsw-alias-bg-mask-2, rgba(0, 0, 0, 0.16));
 }
 
 .cfx-summary-card::-webkit-scrollbar {
@@ -571,12 +597,6 @@ body:not([data-ds-dark-theme]) {
   font: 700 7px/1 var(--ds-font-family-code);
 }
 
-@media (min-width: 1440px) {
-  .cfx-summary-card {
-    display: block;
-  }
-}
-
 .cfx-workbench-new-tab {
   flex: 1;
   min-height: 0;
@@ -635,19 +655,12 @@ body:not([data-ds-dark-theme]) {
   font: 11px/18px var(--ds-font-family-code);
 }
 
-@media (max-width: 1439px) {
-  .cfx-launcher-overlay {
-    display: none;
-  }
-}
-
 [data-codex-files-layout-expanded] {
-  grid-template-columns: var(--cfx-expanded-sidebar-width, 56px) 0px minmax(0, 1fr) !important;
+  grid-template-columns: var(--cfx-sidebar-width, 280px) 0 minmax(0, 1fr) !important;
 }
 
-[data-codex-files-layout-expanded] [data-side='sidebar'],
 [data-codex-files-layout-expanded] [data-side='details'] {
-  display: none;
+  display: none !important;
 }
 
 .cfx-header {
@@ -1047,6 +1060,11 @@ body:not([data-ds-dark-theme]) {
 }
 
 .cfx-header-toggle:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+.cfx-header-toggle-active {
   background: var(--dsw-alias-interactive-bg-hover);
   color: var(--dsw-alias-label-primary);
 }
@@ -1817,30 +1835,44 @@ body[data-ds-dark-theme] .cfx-review-badge-unstaged {
   flex-direction: column;
   border-top: 1px solid var(--dsw-alias-border-l2);
   border-radius: 0;
-  overflow: hidden;
+  overflow: visible;
   background: var(--dsw-alias-bg-layer-1);
   box-shadow: none;
 }
 
 .cfx-bottom-panel-resize-handle {
-  flex: none;
-  height: 5px;
+  position: absolute;
+  z-index: 30;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 16px;
+  transform: translateY(-8px);
+  outline: none;
   cursor: ns-resize;
   touch-action: none;
-  position: relative;
-  z-index: 2;
 }
 
 .cfx-bottom-panel-resize-handle::after {
-  content: none;
+  content: '';
+  position: absolute;
+  top: 7.5px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--dsw-alias-border-l4) 12%, var(--dsw-alias-border-l4) 88%, transparent);
+  opacity: 0;
+  transition: opacity 120ms ease;
 }
 
-.cfx-bottom-panel-resize-handle:hover::after {
-  content: none;
+.cfx-bottom-panel-resize-handle:hover::after,
+.cfx-bottom-panel-resize-handle:focus-visible::after,
+[data-codex-files-bottom-panel-resizing] .cfx-bottom-panel-resize-handle::after {
+  opacity: 1;
 }
 
 [data-codex-files-bottom-panel-open] {
-  grid-template-rows: minmax(0, 1fr) var(--cfx-bottom-panel-height, 30vh) !important;
+  grid-template-rows: minmax(0, 1fr) var(--cfx-bottom-panel-height, 280px) !important;
   transition:
     grid-template-rows var(--ds-transition-duration-slow) var(--ds-ease-in-out),
     grid-template-columns var(--ds-transition-duration-slow) var(--ds-ease-in-out);
