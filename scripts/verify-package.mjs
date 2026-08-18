@@ -15,6 +15,15 @@ const expectedName = 'dsh-codex-file-panel'
 if (pkg.name !== expectedName) fail(`package name must be ${expectedName}`)
 if (pkg.private === true) fail('publishable bundle must not be private')
 if (pkg.license !== 'MIT') fail('package license must match LICENSE')
+if (pkg.repository?.url !== 'git+https://github.com/JesonChou/dsh-codex-file-panel.git') {
+  fail('repository URL is missing or invalid')
+}
+if (pkg.homepage !== 'https://github.com/JesonChou/dsh-codex-file-panel#readme') {
+  fail('homepage URL is missing or invalid')
+}
+if (pkg.bugs?.url !== 'https://github.com/JesonChou/dsh-codex-file-panel/issues') {
+  fail('bugs URL is missing or invalid')
+}
 if (pkg.main !== './lib/index.js') fail('main must point to ./lib/index.js')
 if (pkg.types !== './lib/index.d.ts') fail('types must point to ./lib/index.d.ts')
 if (pkg.dsh?.bundle?.patch !== './cordis.patch.yml') fail('dsh.bundle.patch is missing or invalid')

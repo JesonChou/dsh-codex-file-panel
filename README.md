@@ -1,5 +1,8 @@
 # dsh-codex-file-panel
 
+[![CI](https://github.com/JesonChou/dsh-codex-file-panel/actions/workflows/ci.yml/badge.svg)](https://github.com/JesonChou/dsh-codex-file-panel/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI 提供 Codex 风格的工作区文件侧栏。
 
 它把文件树、搜索、编辑、预览与 Git review 集中到右侧面板，并补充底部终端等与文件工作流紧密相关的能力。项目按照 Harness 官方 bundle 规范组织，仓库根目录本身就是可由 `dsh plugin add` 安装的插件包。
@@ -32,13 +35,19 @@
 
 ### 从 GitHub 安装
 
-仓库配置远程地址后，将 `<owner>/<repo>` 替换为实际 GitHub 仓库，并固定到可信 commit：
+安装 `main` 分支的最新源码：
 
 ```sh
-dsh plugin --profile web add github:<owner>/<repo>#<commit-sha>
+dsh plugin --profile web add github:JesonChou/dsh-codex-file-panel
 ```
 
-Git 安装获取的是源码，因此包内的 `prepare` 会构建 `lib/`。pnpm 10 及以上默认阻止依赖执行构建脚本；首次安装若提示 blocked build，请按终端输出的精确包键修改该 profile 的 `pnpm-workspace.yaml`，例如：
+`main` 会继续变化。需要可复现安装时，请固定到经过审计的 tag 或完整 commit SHA：
+
+```sh
+dsh plugin --profile web add github:JesonChou/dsh-codex-file-panel#<tag-or-commit-sha>
+```
+
+Git 安装获取的是源码，因此包内的 `prepare` 会构建 `lib/`。pnpm 10 及以上默认阻止依赖执行构建脚本；首次 `add` 可能先失败，并在目标 profile 的 `pnpm-workspace.yaml` 中生成待确认项。请按终端输出的精确包键授权，例如：
 
 ```yaml
 allowBuilds:
@@ -46,13 +55,15 @@ allowBuilds:
   node-pty: true
 ```
 
-保存后重新执行 `add`。这项授权允许依赖在沙箱外执行本机代码，只应对已审计且固定 commit 的源码开放。
+保存后重新执行同一条 `add` 命令。这项授权允许依赖在沙箱外执行本机代码，只应对已审计且固定 commit 的源码开放。
 
 ### 从本地 checkout 安装
 
-在仓库根目录执行：
+克隆仓库并在根目录执行：
 
 ```sh
+git clone https://github.com/JesonChou/dsh-codex-file-panel.git
+cd dsh-codex-file-panel
 corepack enable
 pnpm install --frozen-lockfile
 dsh plugin --profile web add .
@@ -80,6 +91,16 @@ dsh --profile web
 ```sh
 dsh plugin --profile web remove dsh-codex-file-panel
 ```
+
+### 升级
+
+跟随 `main` 安装的用户可以让 pnpm 更新 Git 依赖：
+
+```sh
+dsh plugin --profile web update dsh-codex-file-panel
+```
+
+固定 tag/SHA 的用户应重新执行 `add`，并把 URL fragment 改为目标 tag 或 commit；更新后再次运行 `dsh --profile web --dump-config` 检查组合层。
 
 ## 配置
 

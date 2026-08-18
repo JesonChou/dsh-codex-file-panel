@@ -11,7 +11,16 @@
     "sidebar",
     "web-ui"
   ],
+  "author": "JesonChou",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JesonChou/dsh-codex-file-panel.git"
+  },
+  "homepage": "https://github.com/JesonChou/dsh-codex-file-panel#readme",
+  "bugs": {
+    "url": "https://github.com/JesonChou/dsh-codex-file-panel/issues"
+  },
   "type": "module",
   "main": "./lib/index.js",
   "types": "./lib/index.d.ts",

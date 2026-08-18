@@ -2,13 +2,13 @@
 
 本项目的重要变更记录在此文件中。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
 
-## Unreleased
+## [Unreleased]
 
-### Added
+### Changed
 
-- 暂无。
+- 补充真实 GitHub 仓库地址、安装/升级命令和 npm 包仓库元数据。
 
-## 0.4.0 - 2026-08-18
+## [0.4.0] - 2026-08-18
 
 ### Added
 
@@ -25,3 +25,6 @@
 ### Removed
 
 - `hello-plugin` 示例包、通用 workspace 说明和本机 Harness 镜像引导脚本。
+
+[Unreleased]: https://github.com/JesonChou/dsh-codex-file-panel/compare/c4f6e2b002897205e24f943ab250ff496345759e...HEAD
+[0.4.0]: https://github.com/JesonChou/dsh-codex-file-panel/commit/c4f6e2b002897205e24f943ab250ff496345759e

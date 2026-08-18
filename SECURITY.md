@@ -6,7 +6,7 @@
 
 ## 私下报告漏洞
 
-请使用 GitHub 仓库 **Security → Report a vulnerability** 创建私密安全报告，并提供：
+请通过 [GitHub Private Vulnerability Reporting](https://github.com/JesonChou/dsh-codex-file-panel/security/advisories/new) 创建私密安全报告，并提供：
 
 - 受影响版本或 commit。
 - 操作系统、Node.js 与 DeepSeek Harness 版本。
@@ -14,7 +14,7 @@
 - 实际影响和你建议的修复方向。
 - 是否已经在其他地方披露。
 
-如果仓库尚未启用 Private Vulnerability Reporting，请创建不含漏洞细节的普通 Issue，请求维护者提供私密联系渠道。不要公开粘贴 PoC、工作区内容、凭据或本机路径。
+如果仓库尚未启用 Private Vulnerability Reporting，请创建一个[不含漏洞细节的普通 Issue](https://github.com/JesonChou/dsh-codex-file-panel/issues/new/choose)，请求维护者提供私密联系渠道。不要公开粘贴 PoC、工作区内容、凭据或本机路径。
 
 维护者会尽力在 7 天内确认报告，并在确认影响后协商披露时间。项目由社区维护，无法承诺固定修复时限。
 

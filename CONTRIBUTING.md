@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢你改进 `dsh-codex-file-panel`。小型修复可以直接提交 Pull Request；涉及公共 API、依赖、权限边界或大幅界面变化的改动，建议先创建 Issue 说明目标和取舍。
+感谢你改进 `dsh-codex-file-panel`。小型修复可以直接提交 [Pull Request](https://github.com/JesonChou/dsh-codex-file-panel/pulls)；涉及公共 API、依赖、权限边界或大幅界面变化的改动，建议先创建 [Issue](https://github.com/JesonChou/dsh-codex-file-panel/issues) 说明目标和取舍。
 
 参与项目即表示你同意遵守 [行为准则](CODE_OF_CONDUCT.md)。安全问题不要公开提交，请按 [SECURITY.md](SECURITY.md) 报告。
 
@@ -9,6 +9,8 @@
 需要 Node.js 22+ 和 pnpm 11。仓库使用 Corepack 锁定 pnpm 版本：
 
 ```sh
+git clone https://github.com/JesonChou/dsh-codex-file-panel.git
+cd dsh-codex-file-panel
 corepack enable
 pnpm install --frozen-lockfile
 pnpm run check
