@@ -45,4 +45,28 @@ describe('Codex workbench resize theme', () => {
     expect(getComputedStyle(flow).transform).toBe('translateX(-158px)')
     expect(getComputedStyle(composer).transform).toBe('translateX(-158px)')
   })
+
+  it('keeps the new-session hero centered when summary compensation is active', () => {
+    const style = document.createElement('style')
+    style.textContent = CODEX_THEME_CSS
+    document.head.appendChild(style)
+
+    const frame = document.createElement('div')
+    frame.setAttribute('data-codex-files-frame', 'true')
+    frame.setAttribute('data-codex-files-summary-mode', 'shift')
+    frame.setAttribute('data-codex-files-summary-visible', '')
+    const hero = document.createElement('div')
+    hero.setAttribute('data-phase', 'hero')
+    const flow = document.createElement('div')
+    flow.setAttribute('data-chat-flow', '')
+    const composer = document.createElement('div')
+    composer.setAttribute('data-composer-card', 'true')
+    hero.append(flow, composer)
+    frame.append(hero)
+    document.body.appendChild(frame)
+
+    expect(getComputedStyle(flow).transform).toBe('none')
+    expect(getComputedStyle(composer).transform).toBe('none')
+    expect(getComputedStyle(composer).transition).toBe('none')
+  })
 })

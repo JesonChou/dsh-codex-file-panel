@@ -440,11 +440,19 @@ body:not([data-ds-dark-theme]) {
    fixed-width conversation and composer half a card to the left. This keeps
    their left gutter and the gap before the 316px summary card balanced. The
    widest gutter mode already has enough natural margin and the narrow
-   overlay mode intentionally floats, so neither receives this offset. */
+   overlay mode intentionally floats, so neither receives this offset.
+   The new-session Hero is already centered by the conversation layout and
+   must not inherit the active-conversation summary compensation. */
 [data-codex-files-frame][data-codex-files-summary-mode='shift'][data-codex-files-summary-visible] [data-chat-flow],
 [data-codex-files-frame][data-codex-files-summary-mode='shift'][data-codex-files-summary-visible] [data-composer-card] {
   transform: translateX(-158px);
   transition: transform var(--ds-transition-duration-slow) var(--ds-ease-in-out);
+}
+
+[data-codex-files-frame][data-codex-files-summary-mode='shift'][data-codex-files-summary-visible] [data-phase='hero'] [data-chat-flow],
+[data-codex-files-frame][data-codex-files-summary-mode='shift'][data-codex-files-summary-visible] [data-phase='hero'] [data-composer-card] {
+  transform: none;
+  transition: none;
 }
 
 .cfx-summary-card-overlay {
