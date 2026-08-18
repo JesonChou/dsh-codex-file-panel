@@ -3,7 +3,7 @@
  * workbench so that every page is a peer in the native tab strip; this
  * component only renders the active page and its navigation controls.
  */
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   IconChevronLeftOutline14,
   IconChevronRightOutline14,
@@ -60,6 +60,11 @@ interface WebViewBridge {
   postMessage(message: unknown): void
 }
 
+interface NativeTabState {
+  generation: string
+  geometry: string
+}
+
 function getWebViewBridge(): WebViewBridge | null {
   const hostWindow = window as Window & { chrome?: { webview?: WebViewBridge } }
   return hostWindow.chrome?.webview ?? null
@@ -99,9 +104,16 @@ export function BrowserView(props: BrowserViewProps) {
   const { t, tabs, activeTabId, onTabsChange, onActiveTabChange, visible = true, showTabs = false } = props
   const tabsRef = useRef(tabs)
   const frameRef = useRef<HTMLIFrameElement>(null)
-  const nativeTabIdsRef = useRef(new Set(tabs.map(tab => tab.id)))
+  const nativeTabIdsRef = useRef(new Set<number>())
+  const nativeTabStateRef = useRef(new Map<number, NativeTabState>())
   tabsRef.current = tabs
   const activeTab = (tabs.find(tab => tab.id === activeTabId) ?? tabs[0])!
+  const [address, setAddress] = useState(activeTab.url ?? '')
+  const hasNativeBrowser = getWebViewBridge() !== null
+
+  useEffect(() => {
+    setAddress(activeTab.url ?? '')
+  }, [activeTab.id, activeTab.url])
 
   const openInternalTab = (raw: string): void => {
     const result = normalizeBrowserUrl(raw, window.location.origin)
@@ -126,13 +138,21 @@ export function BrowserView(props: BrowserViewProps) {
       if (!tabsRef.current.some(tab => tab.id === payload.tabId)) return
       const result = normalizeBrowserUrl(payload.url, window.location.origin)
       if (!result.ok || result.url === undefined) return
-      onTabsChange(tabsRef.current.map(tab => tab.id === payload.tabId ? {
-        ...tab,
-        url: result.url!,
-        history: tab.history[tab.cursor] === result.url ? tab.history : [...tab.history.slice(0, tab.cursor + 1), result.url!],
-        cursor: tab.history[tab.cursor] === result.url ? tab.cursor : tab.cursor + 1,
-        reloadKey: tab.reloadKey + 1,
-      } : tab))
+      const nextUrl = result.url
+      onTabsChange(tabsRef.current.map(tab => {
+        if (tab.id !== payload.tabId) return tab
+        // The native host emits this after the child WebView has already
+        // navigated. This only synchronizes the address/history; changing
+        // reloadKey here would close and recreate the just-opened tab,
+        // causing a visible flash (and, for media, a second player).
+        if (tab.history[tab.cursor] === nextUrl) return tab
+        return {
+          ...tab,
+          url: nextUrl,
+          history: [...tab.history.slice(0, tab.cursor + 1), nextUrl],
+          cursor: tab.cursor + 1,
+        }
+      }))
     }
     const bridge = getWebViewBridge()
     window.addEventListener('message', onMessage)
@@ -149,40 +169,80 @@ export function BrowserView(props: BrowserViewProps) {
   useEffect(() => {
     const currentIds = new Set(tabs.map(tab => tab.id))
     for (const tabId of nativeTabIdsRef.current) {
-      if (!currentIds.has(tabId)) closeNativeBrowserTab(tabId)
+      if (!currentIds.has(tabId)) {
+        closeNativeBrowserTab(tabId)
+        nativeTabStateRef.current.delete(tabId)
+      }
     }
-    nativeTabIdsRef.current = currentIds
+    nativeTabIdsRef.current = new Set([...nativeTabIdsRef.current].filter(tabId => currentIds.has(tabId)))
   }, [tabs])
 
   // The browser panel can be unmounted while its last tab is still playing.
   // Codex tears down the page in this case; do the same for every native tab.
   useEffect(() => {
     return () => {
-      for (const tab of tabsRef.current) closeNativeBrowserTab(tab.id)
+      for (const tabId of nativeTabIdsRef.current) closeNativeBrowserTab(tabId)
       getWebViewBridge()?.postMessage({ type: 'dsh-browser-native-tab-active', tabId: null })
     }
   }, [])
 
   // In the desktop Harness, the iframe is only a geometry anchor. A native
   // WebView2 child is positioned over it so pages that send
-  // frame-ancestors 'none' (including DeepSeek sign-in) still render.
+  // frame-ancestors 'none' (including DeepSeek sign-in) still render. Keep
+  // the anchor on about:blank: loading the remote page here as well would
+  // create a second media document underneath the native child, so a video
+  // would play twice and produce an echo.
   useEffect(() => {
     const bridge = getWebViewBridge()
     if (bridge === null) return
     const sendGeometry = (): void => {
       const frame = frameRef.current
-      if (!visible || frame === null || activeTab.url === null) {
+      if (activeTab.url === null) {
+        // The shell can reload without running the previous component's
+        // unmount cleanup. Reclaim the initial id even before a new address
+        // is entered, so an orphaned page cannot keep playing in the
+        // background after the app refreshes.
+        closeNativeBrowserTab(activeTab.id)
+        nativeTabStateRef.current.delete(activeTab.id)
+        nativeTabIdsRef.current.delete(activeTab.id)
+        bridge.postMessage({ type: 'dsh-browser-native-tab-active', tabId: null })
+        return
+      }
+      if (!visible || frame === null) {
         bridge.postMessage({ type: 'dsh-browser-native-tab-active', tabId: null })
         return
       }
       const rect = frame.getBoundingClientRect()
-      bridge.postMessage({
-        type: 'dsh-browser-native-tab',
-        tabId: activeTab.id,
-        url: activeTab.url,
+      const geometry = JSON.stringify({
+        x: rect.x,
+        y: rect.y,
+        width: rect.width,
+        height: rect.height,
         devicePixelRatio: window.devicePixelRatio || 1,
-        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
       })
+      // URL changes reported by the native child are already loaded in that
+      // child. Only an explicit reload/navigation action increments
+      // reloadKey and requires replacing the native page.
+      const generation = String(activeTab.reloadKey)
+      const previous = nativeTabStateRef.current.get(activeTab.id)
+      const needsNewPage = previous?.generation !== generation
+      if (needsNewPage) {
+        // A page reload can outlive the old top-level document in the host.
+        // Reclaim the id before creating the replacement so stale WebView2
+        // children cannot remain audible underneath the new one.
+        closeNativeBrowserTab(activeTab.id)
+      }
+      if (needsNewPage || previous?.geometry !== geometry) {
+        bridge.postMessage({
+          type: 'dsh-browser-native-tab',
+          tabId: activeTab.id,
+          url: activeTab.url,
+          devicePixelRatio: window.devicePixelRatio || 1,
+          rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        })
+        nativeTabStateRef.current.set(activeTab.id, { generation, geometry })
+      }
+      nativeTabIdsRef.current.add(activeTab.id)
       bridge.postMessage({ type: 'dsh-browser-native-tab-active', tabId: activeTab.id })
     }
     sendGeometry()
@@ -270,18 +330,17 @@ export function BrowserView(props: BrowserViewProps) {
         </button>
         <input
           className="cfx-browser-input"
-          value={activeTab.url ?? ''}
+          value={address}
           placeholder={t('browser.placeholder')}
           spellCheck={false}
           onChange={(event) => {
-            const value = event.target.value
-            onTabsChange(tabsRef.current.map(tab => tab.id === activeTab.id ? { ...tab, url: value } : tab))
+            setAddress(event.target.value)
           }}
           onKeyDown={(event) => {
-            if (event.key === 'Enter') navigateTo(activeTab.url ?? '')
+            if (event.key === 'Enter') navigateTo(address)
           }}
         />
-        <button type="button" className="cfx-icon-button" aria-label={t('browser.go')} title={t('browser.go')} onClick={() => { navigateTo(activeTab.url ?? '') }}>
+        <button type="button" className="cfx-icon-button" aria-label={t('browser.go')} title={t('browser.go')} onClick={() => { navigateTo(address) }}>
           <IconLinkOutline14 size={14} />
         </button>
         <button
@@ -299,7 +358,7 @@ export function BrowserView(props: BrowserViewProps) {
           key={`${activeTab.id}:${activeTab.reloadKey}`}
           ref={frameRef}
           className="cfx-browser-frame"
-          src={activeTab.url}
+          src={hasNativeBrowser ? 'about:blank' : activeTab.url}
           title={activeTab.url}
           sandbox={IFRAME_SANDBOX}
           referrerPolicy="no-referrer"

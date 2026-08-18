@@ -46,6 +46,7 @@ describe('BrowserView', () => {
     const input = getByRole('textbox')
 
     fireEvent.change(input, { target: { value: 'https://www.deepseek.com/' } })
+    expect((input as HTMLInputElement).value).toBe('https://www.deepseek.com/')
     fireEvent.keyDown(input, { key: 'Enter' })
 
     const frame = container.querySelector('iframe')
@@ -92,6 +93,93 @@ describe('BrowserView', () => {
     expect(postMessage).toHaveBeenCalledWith({ type: 'dsh-browser-native-tab-close', tabId: 1 })
   })
 
+  it('only claims a native page after the address is submitted', async () => {
+    const postMessage = vi.fn()
+    const bridge = {
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      postMessage,
+    }
+    Object.defineProperty(window, 'chrome', { configurable: true, value: { webview: bridge } })
+
+    const { getByRole } = render(<TestBrowserView />)
+    const input = getByRole('textbox')
+    fireEvent.change(input, { target: { value: 'https://www.bilibili.com/' } })
+    expect(postMessage.mock.calls.some(([message]) => message?.type === 'dsh-browser-native-tab')).toBe(false)
+
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(postMessage.mock.calls.filter(([message]) => message?.type === 'dsh-browser-native-tab')).toHaveLength(1))
+  })
+
+  it('reclaims the existing native page before refreshing it', async () => {
+    const postMessage = vi.fn()
+    const bridge = {
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      postMessage,
+    }
+    Object.defineProperty(window, 'chrome', { configurable: true, value: { webview: bridge } })
+
+    const { getByRole } = render(<TestBrowserView />)
+    const input = getByRole('textbox')
+    fireEvent.change(input, { target: { value: 'https://www.bilibili.com/' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(postMessage.mock.calls.filter(([message]) => message?.type === 'dsh-browser-native-tab')).toHaveLength(1))
+
+    postMessage.mockClear()
+    fireEvent.click(getByRole('button', { name: 'browser.refresh' }))
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith({ type: 'dsh-browser-native-tab-close', tabId: 1 }))
+    expect(postMessage.mock.calls.filter(([message]) => message?.type === 'dsh-browser-native-tab')).toHaveLength(1)
+  })
+
+  it('only syncs native navigation acknowledgements without reloading the native page', async () => {
+    const postMessage = vi.fn()
+    const bridge = {
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      postMessage,
+    }
+    Object.defineProperty(window, 'chrome', { configurable: true, value: { webview: bridge } })
+
+    const { getByRole } = render(<TestBrowserView />)
+    const input = getByRole('textbox')
+    fireEvent.change(input, { target: { value: 'https://www.bilibili.com/' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    await waitFor(() => expect(postMessage.mock.calls.filter(([message]) => message?.type === 'dsh-browser-native-tab')).toHaveLength(1))
+
+    postMessage.mockClear()
+    window.dispatchEvent(new MessageEvent('message', {
+      data: { type: 'dsh-browser-native-navigate', tabId: 1, url: 'https://www.bilibili.com/' },
+    }))
+    await new Promise(resolve => window.setTimeout(resolve, 0))
+    expect(postMessage.mock.calls.some(([message]) => message?.type === 'dsh-browser-native-tab')).toBe(false)
+
+    window.dispatchEvent(new MessageEvent('message', {
+      data: { type: 'dsh-browser-native-navigate', tabId: 1, url: 'https://www.bilibili.com/video/1' },
+    }))
+    await new Promise(resolve => window.setTimeout(resolve, 0))
+    expect(postMessage.mock.calls.some(([message]) => message?.type === 'dsh-browser-native-tab')).toBe(false)
+    expect(postMessage.mock.calls.some(([message]) => message?.type === 'dsh-browser-native-tab-close')).toBe(false)
+    expect((getByRole('textbox') as HTMLInputElement).value).toBe('https://www.bilibili.com/video/1')
+  })
+
+  it('does not load the remote page in the geometry iframe when the desktop host owns a native page', async () => {
+    const bridge = {
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      postMessage: vi.fn(),
+    }
+    Object.defineProperty(window, 'chrome', { configurable: true, value: { webview: bridge } })
+
+    const { container, getByRole } = render(<TestBrowserView />)
+    const input = getByRole('textbox')
+    fireEvent.change(input, { target: { value: 'https://www.bilibili.com/' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    await waitFor(() => expect(container.querySelector('iframe')).not.toBeNull())
+    expect(container.querySelector('iframe')?.getAttribute('src')).toBe('about:blank')
+  })
+
   it('closes every native page when the browser view is unmounted', async () => {
     const postMessage = vi.fn()
     const bridge = {
@@ -130,6 +218,9 @@ describe('BrowserView', () => {
       url: 'https://www.bilibili.com/',
     })))
 
+    // The initial claim deliberately closes any stale page left by an
+    // application refresh; visibility changes must not close the live page.
+    postMessage.mockClear()
     rerender(<TestBrowserView visible={false} />)
     await waitFor(() => expect(postMessage).toHaveBeenCalledWith({ type: 'dsh-browser-native-tab-active', tabId: null }))
     expect(postMessage.mock.calls.some(([message]) => message?.type === 'dsh-browser-native-tab-close')).toBe(false)
