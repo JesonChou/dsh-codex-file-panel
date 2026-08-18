@@ -69,7 +69,7 @@ jobs:
         run: pnpm pack --pack-destination dist
 
       - name: Upload plugin tarball
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dsh-codex-file-panel
           path: dist/*.tgz
