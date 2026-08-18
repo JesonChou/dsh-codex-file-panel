@@ -1,76 +1,142 @@
-# dsh 插件开发仓库
+# dsh-codex-file-panel
 
-这个仓库用于维护一个或多个可安装的 **dsh 组合包（bundle）**。每个 `plugins/<name>` 目录都是一个独立的 npm 包，按 [插件打包与安装标准](docs/plugin-standard.md) 声明 `dsh.bundle.patch`，因此可以通过 `dsh plugin` 安装进任意 profile，而不必改 dsh 源码。
+为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) Web UI 提供 Codex 风格的工作区文件侧栏。
 
-仓库根目录只是 pnpm workspace，不是一个插件。真正的插件、其 patch 层和构建产物都放在 `plugins/` 下。
+它把文件树、搜索、编辑、预览与 Git review 集中到右侧面板，并补充底部终端等与文件工作流紧密相关的能力。项目按照 Harness 官方 bundle 规范组织，仓库根目录本身就是可由 `dsh plugin add` 安装的插件包。
 
-## 目录
+> [!IMPORTANT]
+> 这是社区维护的第三方项目，不属于 DeepSeek 或 OpenAI。Codex 名称仅用于说明交互风格；项目不包含复制的 Codex 源码或品牌资源。
 
+## 功能
+
+- Codex 风格的可调整宽度右侧文件面板，支持响应式收起与布局持久化。
+- 工作区文件树、文件名搜索、文本读取与保存。
+- Markdown、代码、图片、音视频和 PDF 预览；PDF 资源由插件本地提供。
+- Git 变更查看、暂存、取消暂存和提交。
+- 会话级多标签终端，支持断线短暂保活和尺寸同步。
+- 与 Harness 原生会话、语言包、布局和 client module loader 集成。
+- 中英文界面文案。
+
+## 兼容性
+
+| 组件 | 要求 |
+| --- | --- |
+| DeepSeek Harness | `0.1.0-rc.7` 系列 API |
+| Node.js | 22 或更高版本 |
+| 开发包管理器 | pnpm 11（仓库锁定 `11.21.0`） |
+| 运行界面 | Harness Web UI |
+
+插件依赖 `node-pty` 原生模块。Windows、macOS 和 Linux 均应使用与本机 Node.js ABI 匹配的构建产物。
+
+## 安装
+
+### 从 GitHub 安装
+
+仓库配置远程地址后，将 `<owner>/<repo>` 替换为实际 GitHub 仓库，并固定到可信 commit：
+
+```sh
+dsh plugin --profile web add github:<owner>/<repo>#<commit-sha>
 ```
-dsh-plugins/
-├── docs/
-│   └── plugin-standard.md      # 从 dsh 文档提炼的打包/安装规则
-├── plugins/
-│   ├── README.md               # 每个插件目录的结构与 manifest 约定
-│   ├── hello-plugin/           # 最小可运行 TypeScript 模板
-│   │   ├── package.json        # 声明 dsh.bundle.patch
-│   │   ├── cordis.patch.yml    # 该 bundle 贡献的 patch 层
-│   │   ├── src/index.ts        # 插件入口：export const name + apply()
-│   │   ├── tests/hello.spec.js # node --test 冒烟测试
-│   │   └── tsconfig.json
-│   └── dsh-codex-files/        # Codex 桌面风格主题 + 右侧 Files 面板
-├── package.json                # 私有 workspace 根，只有脚本
-├── pnpm-workspace.yaml
-└── tsconfig.base.json          # 共享的严格 ESM TypeScript 配置
+
+Git 安装获取的是源码，因此包内的 `prepare` 会构建 `lib/`。pnpm 10 及以上默认阻止依赖执行构建脚本；首次安装若提示 blocked build，请按终端输出的精确包键修改该 profile 的 `pnpm-workspace.yaml`，例如：
+
+```yaml
+allowBuilds:
+  dsh-codex-file-panel: true
+  node-pty: true
 ```
 
-## 快速开始
+保存后重新执行 `add`。这项授权允许依赖在沙箱外执行本机代码，只应对已审计且固定 commit 的源码开放。
 
-```powershell
-pnpm install
+### 从本地 checkout 安装
+
+在仓库根目录执行：
+
+```sh
+corepack enable
+pnpm install --frozen-lockfile
+dsh plugin --profile web add .
+```
+
+### 从 tarball 安装
+
+tarball 包含预构建的 JavaScript，不需要为插件本身授权 `prepare`；`node-pty` 仍可能需要本机构建授权。
+
+```sh
+pnpm install --frozen-lockfile
+pnpm pack --pack-destination dist
+dsh plugin --profile web add ./dist/dsh-codex-file-panel-0.4.0.tgz
+```
+
+### 验证与启动
+
+```sh
+dsh --profile web --dump-config
+dsh --profile web
+```
+
+第一条命令的输出应包含 `# == dsh-codex-file-panel` 层。卸载命令：
+
+```sh
+dsh plugin --profile web remove dsh-codex-file-panel
+```
+
+## 配置
+
+插件提供文件传输上限、终端数量、终端 shell、断线保活时间和目录排除项。默认值适合本地开发；完整字段、默认值与 profile 覆盖示例见 [配置文档](docs/configuration.md)。
+
+## 安全边界
+
+插件具备读取和写入会话工作区、执行 Git 操作以及创建本机 PTY 的能力。服务端路由会限制路径不能逃逸会话 `cwd`、限制载荷大小并拒绝非 loopback 来源，但仍应只在可信的本地 Harness 环境中使用。
+
+不要未经认证地把 Web UI 暴露到公网，也不要假设反向代理后的 loopback 检查等同于用户认证。安全问题请按 [SECURITY.md](SECURITY.md) 私下报告。
+
+## 开发
+
+```sh
+corepack enable
+pnpm install --frozen-lockfile
 pnpm run check
 ```
 
-`pnpm run check` 会构建并测试 workspace 里的每个插件。
+`check` 依次执行严格 TypeScript 检查、Node/浏览器双入口构建、Vitest 测试、浏览器 module table 冒烟测试和包结构校验。
 
-## 本地 dsh 类型镜像
+常用命令：
 
-`dsh-codex-files` 需要 `@deepseek-ai/*` 类型来通过 typecheck/build，而这些包并没有全部发布到公共 registry。它的 `dsh-dev/` 是本机 dsh checkout（默认是相邻的 `D:\deepseek-harness`）的本地镜像，已加入 `.gitignore`，不进入 git。
+| 命令 | 用途 |
+| --- | --- |
+| `pnpm run build` | 构建 `lib/index.js`、声明文件和 `lib/client.js` |
+| `pnpm run typecheck` | 检查 Node 与浏览器源码 |
+| `pnpm test` | 运行全部自动化测试 |
+| `pnpm run test:watch` | 监听模式运行测试 |
+| `pnpm run verify` | 校验 bundle 和发布包约束 |
+| `pnpm run e2e:pdf` | 对已启动的本地 Harness 执行 PDF 管线测试 |
 
-在这台机器上开发时保留该镜像即可。换一台机器 clone 后，先构建 dsh checkout，再重新生成镜像：
+E2E 脚本默认连接 `http://127.0.0.1:3080` 并使用当前目录，可通过 `DSH_E2E_BASE_URL` 与 `DSH_E2E_CWD` 覆盖。
 
-```powershell
-node scripts/bootstrap-dsh.mjs --dsh D:\deepseek-harness
-pnpm install
+## 仓库结构
+
+```text
+.
+├── .github/                 # CI、Dependabot、Issue 与 PR 模板
+├── docs/                    # 配置、打包规范和布局契约
+├── scripts/                 # 构建产物、包结构和 E2E 校验
+├── src/
+│   ├── client/              # Web UI 文件面板与工作台界面
+│   ├── index.ts             # Harness 服务端插件入口
+│   └── pty-manager.ts       # 会话终端生命周期
+├── tests/                   # 单元、组件和 bundle 冒烟测试
+├── cordis.patch.yml         # dsh.bundle 提供的配置层
+├── package.json             # bundle/client manifest 与发布元数据
+└── tsdown.config.ts         # Node + 浏览器双入口构建
 ```
 
-`bootstrap-dsh.mjs` 会扫描 dsh 的 `vendor/*`、`packages/*/*` 和 `native/landlock-run/packages/*`，把每个 `@deepseek-ai/*` 包的 `lib` 与重写后的 `package.json` 复制到 `plugins/dsh-codex-files/dsh-dev/ai/`；加 `--dry-run` 只列出计划，不写文件。
+打包约束见 [插件打包规范](docs/plugin-standard.md)，可观察布局依据见 [Codex Desktop 布局契约](docs/codex-desktop-layout-contract.md)。
 
-## 新增一个插件
+## 参与贡献
 
-1. 复制模板：
+提交前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 和 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。面向用户的变化应同步更新 [CHANGELOG.md](CHANGELOG.md)。
 
-   ```powershell
-   Copy-Item -Recurse plugins\hello-plugin plugins\my-plugin
-   ```
+## 许可证
 
-2. 改三处标识：`package.json` 的 `name`、`cordis.patch.yml` 里的 `id` 与 `name`（指向包名）、`src/index.ts` 里的 `export const name`。
-
-3. 按需替换 `src/index.ts` 的内容。真实插件应从 `@deepseek-ai/cordis` 导入 `Context`，并通过 `inject` 声明服务依赖、通过 `ctx.effect()` / `ctx.on()` 注册可回收的贡献；模板里的 `PluginContext` 只是免依赖的最小占位。
-
-## 安装到 profile
-
-本地源码直接链接：
-
-```powershell
-dsh plugin --profile web add D:\dsh-plugins\plugins\my-plugin
-```
-
-之后 `dsh --profile web` 会在 profile 的 bundle 层之后挂载该插件；先用 `dsh --profile web --dump-config` 检查这一层，再启动。
-
-## 发布
-
-- **git 安装**：源码 checkout 不会自动跑 `build`，插件必须提供自包含的 `prepare` 脚本；安装方还要在 profile 的 `pnpm-workspace.yaml` 里为对应包名授权 `allowBuilds`。
-- **npm / tarball**：发布前先构建好 `lib/`；`pnpm pack` 打包后可以用 `dsh plugin add <tgz>` 安装。
-
-细节见 [docs/plugin-standard.md](docs/plugin-standard.md)。
+[MIT](LICENSE)

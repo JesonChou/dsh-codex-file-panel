@@ -1,87 +1,104 @@
-# 插件打包与安装标准
+# DeepSeek Harness 插件打包规范
 
-以下规则提炼自 dsh 源码里的 `docs/user/develop/basic/publish.md`。开发本仓库的插件前先读完那份原文；这里只保留日常开发必须记住的部分。
+本文记录本仓库遵循的发布约束。权威来源是 DeepSeek Harness 官方文档的 [打包与安装插件](https://deepseek-harness.github.io/deepseek-harness/develop/basic/publish)；官方行为变化时应以原文为准。
 
-## 两种 manifest
+## Bundle 与 profile
 
-dsh 用两种 package.json manifest 区分「贡献配置」和「启动配置」，同一个包不能同时是两者：
+Harness 使用两种不同 manifest：
 
-- **bundle**：声明 `dsh.bundle`，回答“这个包贡献什么”。它是带一个 patch 层的 npm 包。
-- **profile**：声明 `dsh.profile`，回答“哪些 bundle 按什么顺序组成一套配置”。它位于 `$DSH_HOME/profiles/<name>`。
+- bundle 是作者分发的 npm 包，通过 `package.json` 的 `dsh.bundle` 声明自己贡献的配置层。
+- profile 是用户机器上由 `dsh plugin` 管理的可运行组合，通过 `dsh.profile.bundles` 记录 bundle 顺序。
 
-本仓库只产出 bundle。
+一个包不能同时是 bundle 和 profile。本仓库只产出 bundle，绝不手写或发布用户 profile。
 
-## 一个 bundle 的最小结构
+## 本仓库的发布结构
 
+```text
+dsh-codex-file-panel/
+├── package.json
+├── cordis.patch.yml
+├── lib/
+│   ├── index.js
+│   ├── index.d.ts
+│   └── client.js
+├── README.md
+└── LICENSE
 ```
-hello-plugin/
-├── package.json       # 声明 dsh.bundle.patch
-├── cordis.patch.yml   # profile 挂载这个 bundle 时应用的层
-└── index.js           # patch 行引用的插件入口（TS 则是 lib/index.js）
-```
 
-`package.json` 的必需部分：
+源码仓库还包含 `src/`、`tests/`、`scripts/` 和 GitHub 社区文件，但 `package.json#files` 只把运行必需内容放进 npm/tarball。
+
+## Manifest
+
+关键字段如下：
 
 ```json
 {
-  "name": "dsh-hello-plugin",
-  "version": "0.1.0",
+  "name": "dsh-codex-file-panel",
   "type": "module",
-  "main": "index.js",
-  "files": ["index.js", "cordis.patch.yml"],
-  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } }
+  "main": "./lib/index.js",
+  "files": ["lib", "cordis.patch.yml", "README.md", "LICENSE"],
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ],
+      "platform": "web"
+    }
+  }
 }
 ```
 
-插件入口命名导出 `apply`，Cordis 加载时调用它并传入 `ctx`；`name` 是可选显示元数据。
+没有 `dsh.bundle` 的包仍会成为 profile 依赖，但不会贡献任何配置层。`dsh.client` 是本插件浏览器入口所需的 client module 元数据。
 
-## patch 层
+## Patch 层
 
-`cordis.patch.yml` 的顶层是一个 YAML 数组，条目是 `--patch` overlay 使用的同一套 `PatchOptions`。与 overlay 的区别是：行里的 `name` 写**包名**而不是相对源码路径，这样 Node 能按普通模块解析找到已安装的代码：
+`cordis.patch.yml` 顶层是 patch 数组。插件行按 npm 包名解析，不能写仓库相对路径：
 
 ```yaml
 - insert:
-    - id: hello
-      name: dsh-hello-plugin
+    - id: dsh-codex-file-panel
+      name: dsh-codex-file-panel
 ```
 
-没有 `dsh.bundle` 声明的包仍可安装，但只会作为普通依赖，不激活任何层。
+配置应用顺序为：profile bundle 列表、profile 自身 patch、home 级 patch、命令行 `--patch`。后层按行覆盖前层，行内 `config` 会整体替换而不是深度合并，因此用户覆盖插件行时必须重述全部需要的字段。
 
-## 层顺序
+## GitHub 源码安装
 
-生效配置从空根开始，按以下顺序应用：
+Git 依赖下载源码而不是 `lib/`。本包因此声明自包含的 `prepare: tsdown`，其开发依赖全部来自 npm registry，不依赖旁边的 monorepo 或本地 Harness checkout。
 
-1. profile 的 `dsh.profile.bundles` 列表，按列表顺序。
-2. profile 自己的 `cordis.patch.yml`。
-3. home 级 `$DSH_HOME/cordis.patch.yml`。
-4. 每个 `--patch <path>` overlay，按 argv 顺序。
+pnpm 10 及以上需要用户在目标 profile 中明确允许这个 `prepare`。授权意味着安装阶段可在 agent 沙箱外执行包代码，因此文档要求固定 commit，并只安装可信源码。
 
-后层胜出；按 `id` 覆盖时要重述该行需要的全部键，而不是只写改动项。
+## npm 与 tarball
 
-## 安装
+`prepack` 会运行完整 `check`，确保被发布的入口已经构建并通过测试。发布前应执行：
 
 ```sh
-dsh plugin --profile <name> add <path | github:owner/repo | npm-package | tarball>
-dsh plugin --profile <name> remove <package>
+pnpm install --frozen-lockfile
+pnpm run check
+pnpm pack --pack-destination dist
 ```
 
-## git 安装的构建脚本
+tarball 内容必须包含：
 
-git 安装拉取的是源码，不会跑 `build`，TypeScript 包会缺 `lib/` 导致加载失败：
+- `package.json`
+- `cordis.patch.yml`
+- `lib/index.js`
+- `lib/index.d.ts`
+- `lib/client.js`
+- `README.md`
+- `LICENSE`
 
-- **作者**必须提供自包含的 `prepare` 脚本，从源码构建出发布入口，不能依赖旁边的 monorepo checkout。
-- **用户**要为安装时执行代码授权：pnpm ≥10 默认拒绝 git 依赖的 `prepare`，首次 `add` 失败后，把 pnpm 打印的包键写进 profile 的 `pnpm-workspace.yaml`：
+不得包含测试、未编译源码、本地凭据、profile 配置、`node_modules` 或构建机绝对路径。
 
-  ```yaml
-  allowBuilds:
-    dsh-hello-plugin: true
-  ```
+## 发布检查清单
 
-  然后重新 `add`。这份授权意味着允许该包代码在安装时于本机执行，只对可信源码开放，并锁定 commit。
-
-## 免构建分发
-
-不想让用户做 `allowBuilds` 授权，就分发构建产物：
-
-- 发布到 npm：`pnpm publish` 时已带 `lib/`。
-- 交付 tarball：`pnpm pack` 后用 `dsh plugin add ./<pkg>-<version>.tgz` 安装。
+- package 名、Cordis `id`、patch `name`、Node/client `name` 与 client loader ID 一致。
+- `dsh.bundle.patch` 指向实际随包发布的文件。
+- `prepare` 能在只有 registry 依赖的干净 checkout 中完成。
+- peer dependency 范围与目标 Harness 版本一致。
+- `pnpm run check` 在 Windows 与 Linux CI 通过。
+- `pnpm pack` 的文件列表符合上节约束。
+- CHANGELOG、README 兼容性说明和版本号已经更新。

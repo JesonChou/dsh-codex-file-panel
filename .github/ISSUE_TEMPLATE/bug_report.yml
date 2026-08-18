@@ -1,0 +1,76 @@
+name: Bug 报告
+description: 报告可复现的功能、界面或兼容性问题
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢报告。安全漏洞请不要公开提交，改用 SECURITY.md 指定的私密渠道。
+
+  - type: input
+    id: plugin-version
+    attributes:
+      label: 插件版本或 commit
+      placeholder: 0.4.0 / commit SHA
+    validations:
+      required: true
+
+  - type: input
+    id: harness-version
+    attributes:
+      label: DeepSeek Harness 版本
+      placeholder: 0.1.0-rc.7
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: 运行环境
+      description: 操作系统、Node.js 版本、浏览器和安装方式
+      placeholder: Windows 11, Node 22, Chrome, GitHub install
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 启动 profile...
+        2. 打开文件面板...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期行为
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为与日志
+      description: 请删除凭据、工作区内容和不必要的本机路径。
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 截图或补充信息
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已搜索现有 Issue，未找到相同问题。
+          required: true
+        - label: 这不是需要私下报告的安全漏洞。
+          required: true

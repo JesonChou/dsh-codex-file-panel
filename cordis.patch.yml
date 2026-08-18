@@ -1,0 +1,4 @@
+# dsh-codex-file-panel bundle patch: inserts the plugin into a profile layer.
+- insert:
+    - id: dsh-codex-file-panel
+      name: dsh-codex-file-panel

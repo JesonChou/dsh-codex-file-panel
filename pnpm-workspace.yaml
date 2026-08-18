@@ -1,4 +1,10 @@
 packages:
-  - plugins/*
+  - .
+
 allowBuilds:
   node-pty: true
+
+# Harness is a fast-moving preview. Its official scoped packages are pinned by
+# the lockfile and may need to be consumed before the global age window closes.
+minimumReleaseAgeExclude:
+  - '@deepseek-ai/*'
