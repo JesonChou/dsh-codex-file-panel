@@ -89,7 +89,7 @@
   },
   "dependencies": {
     "node-pty": "^1.1.0",
-    "pdfjs-dist": "^4.10.38",
+    "pdfjs-dist": "^6.2.108",
     "ws": "^8.18.0"
   },
   "devDependencies": {
