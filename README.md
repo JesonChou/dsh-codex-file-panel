@@ -8,7 +8,7 @@
 它把文件树、搜索、编辑、预览与 Git review 集中到右侧面板，并补充底部终端等与文件工作流紧密相关的能力。项目按照 Harness 官方 bundle 规范组织，仓库根目录本身就是可由 `dsh plugin add` 安装的插件包。
 
 > [!IMPORTANT]
-> 这是社区维护的第三方项目，不属于 DeepSeek 或 OpenAI。Codex 名称仅用于说明交互风格；项目不包含复制的 Codex 源码或品牌资源。
+> 这是社区维护的第三方项目，不属于 DeepSeek 或 OpenAI。Codex 名称仅用于说明UI交互风格。
 
 ## 功能
 
@@ -156,7 +156,7 @@ E2E 脚本默认连接 `http://127.0.0.1:3080` 并使用当前目录，可通过
 
 ## 参与贡献
 
-提交前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md) 和 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)。面向用户的变化应同步更新 [CHANGELOG.md](CHANGELOG.md)。
+提交前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。面向用户的变化应同步更新 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 许可证
 
